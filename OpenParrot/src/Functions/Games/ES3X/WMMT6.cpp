@@ -762,6 +762,46 @@ static __int64 __fastcall MileageFix(__int64 a1)
 	return g_origMileageFix(a1);
 }
 
+typedef struct {
+	char data[64];
+	unsigned short length;
+} touchscreendata_t;
+
+static std::vector<touchscreendata_t> touchscreenBuffer;
+
+typedef BOOL (WINAPI* ReadFile_t)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+static ReadFile_t pReadFile;
+
+static BOOL Hook_ReadFile(
+	_In_ HANDLE hFile,
+	_Out_ LPVOID lpBuffer,
+	_In_ DWORD nMaxBytes,
+	_Out_opt_ LPDWORD lpNumberRead,
+	_Inout_opt_ LPOVERLAPPED lpOverlapped
+)
+{
+	if (hFile == (HANDLE)0x2)
+	{
+		// dear god I am about to do a Crime
+		if (touchscreenBuffer.empty())
+		{
+			*lpNumberRead = 0;
+			return 1;
+		}
+
+		auto fuck = touchscreenBuffer.back();
+		// am I doing it right
+		memcpy(lpBuffer, fuck.data, fuck.length);
+
+		touchscreenBuffer.pop_back();
+		return 0;
+	}
+
+	return pReadFile(hFile, lpBuffer, nMaxBytes, lpNumberRead, lpOverlapped);
+}
+
+
+
 static InitFunction Wmmt6Func([]()
 {
 	// Alloc debug console
@@ -834,6 +874,7 @@ static InitFunction Wmmt6Func([]()
 
 	// Give me the HWND please maxitune
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
+	MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
 
 	// Hook the window procedure
 	// (The image starts at 0x140000000)

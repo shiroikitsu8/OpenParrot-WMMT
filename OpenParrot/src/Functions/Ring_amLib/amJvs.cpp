@@ -75,9 +75,11 @@ HANDLE __stdcall Hook_CreateFileA(LPCSTR lpFileName,
 	DWORD dwFlagsAndAttributes,
 	HANDLE hTemplateFile)
 {
+	// Cheap hack for the touchscreen
+	// ReadFile checks handle
 	if (strcmp(lpFileName, "COM1") == 0)
 	{
-		return INVALID_HANDLE_VALUE;
+		return (HANDLE)0x02;
 	}
 
 	if (strcmp(lpFileName, hookPort) == 0)
@@ -145,9 +147,12 @@ HANDLE __stdcall Hook_CreateFileW(LPCWSTR lpFileName,
 	DWORD dwFlagsAndAttributes,
 	HANDLE hTemplateFile)
 {
+	// Cheap hack for WMMT6 touchscreen
+	// (It listens on COM1)
+	// Please fix this later, Luna of the future
 	if (wcscmp(lpFileName, L"COM1") == 0)
 	{
-		return INVALID_HANDLE_VALUE;
+		return (HANDLE)0x2;
 	}
 
 	if (wcscmp(lpFileName, L"COM4") == 0 && !JVSAlreadyTaken)

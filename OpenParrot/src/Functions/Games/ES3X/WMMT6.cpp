@@ -741,6 +741,7 @@ static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 static BOOL Hook_ShowWindow(HWND hwnd, int nCmdShow)
 {
 	SetWindowLongPtrW(hwnd, -4, (LONG_PTR)Hook_WndProc);
+	ShowCursor(1);
 
 	mt6Hwnd = hwnd;
 	return pShowWindow(hwnd, nCmdShow);

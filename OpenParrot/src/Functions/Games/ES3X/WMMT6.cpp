@@ -269,9 +269,13 @@ static unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen
 	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
 	bindAddr.sin_port = htons(50765);
 	if (addr == (sockaddr*)& bindAddr) {
+		// terminal proxy
+		// redirect this to localhost
+		
+		auto localhost = inet_addr("127.0.0.1");
 		sockaddr_in bindAddr2 = { 0 };
 		bindAddr2.sin_family = AF_INET;
-		bindAddr2.sin_addr.s_addr = inet_addr(ipaddr);
+		bindAddr2.sin_addr.s_addr = localhost;
 		bindAddr2.sin_port = htons(50765);
 		return pbind(s, (sockaddr*)& bindAddr2, namelen);
 	}
@@ -299,6 +303,7 @@ static uintptr_t SaveLocation = 0x1E183F8;
 
 static int SaveGameData()
 {
+	/*
 	if (!saveOk)
 		return 1;
 
@@ -333,12 +338,14 @@ static int SaveGameData()
 
 	saveOk = false;
 	return 1;
+	*/
 }
 
 static uintptr_t saveGameOffset;
 
 static int LoadGameData()
 {
+	/*
 	saveOk = false;
 	memset(saveData, 0x0, 0x2000);
 	FILE* file = fopen("openprogress.sav", "rb");
@@ -424,6 +431,7 @@ static int LoadGameData()
 		fclose(fmileage);
 	}
 	return 1;
+	*/
 }
 
 static BOOL FileExists(char* szPath)
@@ -436,6 +444,7 @@ static BOOL FileExists(char* szPath)
 
 static DWORD WINAPI SpamCarTuneNeons(LPVOID)
 {
+	/*
 	while (true)
 	{
 		Sleep(16);
@@ -451,10 +460,12 @@ static DWORD WINAPI SpamCarTuneNeons(LPVOID)
 			injector::WriteMemory<BYTE>(carSaveLocation + 0x80, 0x11, true);
 		}	
 	}
+	*/
 }
 
 static void LoadWmmt5CarData()
 {
+	/*
 	if (!loadOk)
 		return;
 	customCar = false;
@@ -542,6 +553,7 @@ static void LoadWmmt5CarData()
 		}
 	}
 	loadOk = false;
+	*/
 }
 
 static int ReturnTrue()
@@ -597,16 +609,19 @@ static char customName[256];
 
 static DWORD WINAPI SpamCustomName(LPVOID)
 {
+	/*
 	while (true)
 	{
 		Sleep(50);
 		void* value = (void*)(imageBase + 0x1E19EE0);
 		memcpy(value, customName, strlen(customName) + 1);
 	}
+	*/
 }
 
 static DWORD WINAPI SpamMulticast(LPVOID)
 {
+	/*
 	WSADATA wsaData;
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 
@@ -693,6 +708,7 @@ static DWORD WINAPI SpamMulticast(LPVOID)
 		sendto(sock, (const char*)byteSequences_Coin[i], byteSizes_Coin[i], 0, (sockaddr*)& toAddr, sizeof(toAddr));
 		Sleep(8);
 	}
+	*/
 }
 
 extern int* ffbOffset;
@@ -704,10 +720,10 @@ static __int64(__fastcall* g_origMileageFix)(__int64);
 
 static __int64 __fastcall MileageFix(__int64 a1)
 {
-	*(DWORD*)(a1 + 224) = mileageValue;
-	auto result = g_origMileageFix(a1);
-	mileageValue += *(DWORD*)(a1 + 228);
-	return result;
+	//*(DWORD*)(a1 + 224) = mileageValue;
+	//auto result = g_origMileageFix(a1);
+	//mileageValue += *(DWORD*)(a1 + 228);
+	return g_origMileageFix(a1);
 }
 
 static InitFunction Wmmt6Func([]()
@@ -756,6 +772,7 @@ static InitFunction Wmmt6Func([]()
 
 	GenerateDongleData(isTerminal);
 
+	// wtf is this??
 	injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
 
 	// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
@@ -764,20 +781,22 @@ static InitFunction Wmmt6Func([]()
 		injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
 	}
 
+	// wtf is this?
 	injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
 
 	auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
 	injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
 
 	// First auth error skip
-	injector::WriteMemory<BYTE>(imageBase + 0x6A0077, 0xEB, true);
+	//injector::WriteMemory<BYTE>(imageBase + 0x6A0077, 0xEB, true);
 	
 	if (isTerminal)
 	{
-		safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+		//safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
 	}
 	else
 	{
+		/*
 		injector::WriteMemory<WORD>(imageBase + 0x6A0C87, 0x00D1, true);		
 		injector::WriteMemory<BYTE>(imageBase + 0x20B88A, 0x90, true);
 		injector::WriteMemory<BYTE>(imageBase + 0x20B88B, 0x90, true);
@@ -791,6 +810,7 @@ static InitFunction Wmmt6Func([]()
 		{
 			CreateThread(0, 0, SpamMulticast, 0, 0, 0);
 		}
+		*/
 	}
 
 	// Enable all print
@@ -857,6 +877,7 @@ static InitFunction Wmmt6Func([]()
 	std::string value = config["General"]["CustomName"];
 	if (!value.empty())
 	{
+		/*
 		if (value.size() > 5)
 		{
 			memset(customName, 0, 256);
@@ -1003,6 +1024,7 @@ static InitFunction Wmmt6Func([]()
 		injector::WriteMemory<BYTE>(imageBase + 0x13C4C15, 0xFF, true);
 		injector::WriteMemory<BYTE>(imageBase + 0x13C4C17, 0xFF, true);
 		injector::WriteMemory<BYTE>(imageBase + 0x13C4C19, 0xFF, true);
+		*/
 	}
 
 	ForceFullTune = (ToBool(config["Tune"]["Force Full Tune"]));
@@ -1010,6 +1032,7 @@ static InitFunction Wmmt6Func([]()
 
 	if (ForceNeon)
 	{
+		/*
 		if (strcmp(config["Tune"]["Select Neon"].c_str(), "Green") == 0)
 			NeonColour = 0x01;
 		if (strcmp(config["Tune"]["Select Neon"].c_str(), "Blue") == 0)
@@ -1030,6 +1053,7 @@ static InitFunction Wmmt6Func([]()
 			NeonColour = 0x09;
 		if (strcmp(config["Tune"]["Select Neon"].c_str(), "Purple Pattern") == 0)
 			NeonColour = 0x0A;
+		*/
 	}
 
 	// Fix dongle error (can be triggered by various USB hubs, dongles
@@ -1037,6 +1061,7 @@ static InitFunction Wmmt6Func([]()
 
 	// Save story stuff (only 05)
 	{
+		/*
 		// skip erasing of temp card data
 		injector::WriteMemory<uint8_t>(imageBase + 0xA54F13, 0xEB, true);
 		// Skip erasing of temp card
@@ -1071,6 +1096,7 @@ static InitFunction Wmmt6Func([]()
 		injector::WriteMemory<uintptr_t>(imageBase + 0x399A56 + 2, (uintptr_t)SaveGameData, true);
 		injector::WriteMemory<DWORD>(imageBase + 0x399A60, 0x3348D0FF, true);
 		injector::WriteMemory<WORD>(imageBase + 0x399A60 + 4, 0x90C0, true);
+		*/
 	}
 
 	MH_EnableHook(MH_ALL_HOOKS);

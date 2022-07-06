@@ -763,7 +763,7 @@ static __int64 __fastcall MileageFix(__int64 a1)
 }
 
 typedef struct {
-	char data[64];
+	char* data;
 	unsigned short length;
 } touchscreendata_t;
 
@@ -782,6 +782,9 @@ static BOOL Hook_ReadFile(
 {
 	if (hFile == (HANDLE)0x2)
 	{
+		if (&touchscreenBuffer == nullptr)
+			return 1;
+
 		// dear god I am about to do a Crime
 		if (touchscreenBuffer.empty())
 		{
@@ -794,7 +797,7 @@ static BOOL Hook_ReadFile(
 		memcpy(lpBuffer, fuck.data, fuck.length);
 
 		touchscreenBuffer.pop_back();
-		return 0;
+		return 1;
 	}
 
 	return pReadFile(hFile, lpBuffer, nMaxBytes, lpNumberRead, lpOverlapped);
@@ -822,6 +825,15 @@ static InitFunction Wmmt6Func([]()
 	std::wcout.clear();
 	std::wcerr.clear();
 	std::wcin.clear();
+
+	touchscreenBuffer = std::vector<touchscreendata_t>();
+
+	char startup_bytes[] = { 0x01, 0x30, 0x0d };
+	auto startup_data = touchscreendata_t{
+		startup_bytes, 3
+	};
+	printf("startup_data.length = %d\n", startup_data.length);
+	touchscreenBuffer.push_back(startup_data);
 
 	puts("hello there, maxitune");
 

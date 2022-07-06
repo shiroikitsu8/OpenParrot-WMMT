@@ -4,6 +4,7 @@
 #include "MinHook.h"
 #include <Utility/Hooking.Patterns.h>
 #include <thread>
+#include <iostream>
 #ifdef _M_AMD64
 #pragma optimize("", off)
 #pragma comment(lib, "Ws2_32.lib")
@@ -258,6 +259,62 @@ static unsigned int Hook_hasp_read(int hasp_handle, int hasp_fileid, unsigned in
 
 static unsigned int Hook_hasp_write(int hasp_handle, int hasp_fileid, unsigned int offset, unsigned int length, unsigned char* buffer) {
 	return HASP_STATUS_OK;
+}
+
+typedef HANDLE(WINAPI* CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static CreateFileA_t pCreateFileA = NULL;
+
+static HANDLE WINAPI Hook_CreateFileA(
+	LPCSTR lpFileName,
+	DWORD dwDesiredAccess,
+	DWORD dwShareMode,
+	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+	DWORD dwCreationDisposition,
+	DWORD dwFlagsAndAttributes,
+	HANDLE hTemplateFile
+)
+{
+	MessageBoxW(NULL, L"CreateFileA", L"fuck", MB_OK | MB_ICONASTERISK);
+
+	printf("MT6_CreateFile:: filename=\"%s\" acc=%d mod=%d\n", lpFileName, dwDesiredAccess, dwShareMode);
+
+	return pCreateFileA(
+		lpFileName,
+		dwDesiredAccess,
+		dwShareMode,
+		lpSecurityAttributes,
+		dwCreationDisposition,
+		dwFlagsAndAttributes,
+		hTemplateFile
+	);
+}
+
+typedef HANDLE(WINAPI* CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static CreateFileW_t pCreateFileW = NULL;
+
+static HANDLE WINAPI Hook_CreateFileW(
+	LPCWSTR lpFileName,
+	DWORD dwDesiredAccess,
+	DWORD dwShareMode,
+	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+	DWORD dwCreationDisposition,
+	DWORD dwFlagsAndAttributes,
+	HANDLE hTemplateFile
+)
+{
+	MessageBoxW(NULL, L"CreateFileW", L"fuck", MB_OK | MB_ICONASTERISK);
+
+	printf("MT6_CreateFile:: filename=\"%S\" acc=%d mod=%d\n", lpFileName, dwDesiredAccess, dwShareMode);
+
+	return pCreateFileW(
+		lpFileName,
+		dwDesiredAccess,
+		dwShareMode,
+		lpSecurityAttributes,
+		dwCreationDisposition,
+		dwFlagsAndAttributes,
+		hTemplateFile
+	);
 }
 
 typedef int (WINAPI* BIND)(SOCKET, CONST SOCKADDR*, INT);
@@ -728,6 +785,27 @@ static __int64 __fastcall MileageFix(__int64 a1)
 
 static InitFunction Wmmt6Func([]()
 {
+	// Alloc debug console
+	FreeConsole();
+	AllocConsole();
+	SetConsoleTitle(L"Maxitune6 Console");
+
+	FILE* pNewStdout = nullptr;
+	FILE* pNewStderr = nullptr;
+	FILE* pNewStdin = nullptr;
+
+	::freopen_s(&pNewStdout, "CONOUT$", "w", stdout);
+	::freopen_s(&pNewStderr, "CONOUT$", "w", stderr);
+	::freopen_s(&pNewStdin, "CONIN$", "r", stdin);
+	std::cout.clear();
+	std::cerr.clear();
+	std::cin.clear();
+	std::wcout.clear();
+	std::wcerr.clear();
+	std::wcin.clear();
+
+	puts("hello there, maxitune");
+
 	// folder for path redirections
 	CreateDirectoryA(".\\TP", nullptr);
 
@@ -770,9 +848,19 @@ static InitFunction Wmmt6Func([]()
 	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
 	MH_CreateHook((void*)(imageBase + 0x35AAC0), MileageFix, (void**)&g_origMileageFix);
 
+	// Hook createfilea
+	if (MH_CreateHookApi(L"kernel32", "CreateFileA", Hook_CreateFileA, reinterpret_cast<LPVOID*>(&pCreateFileA)) != MH_OK)
+	{
+		puts("failed to hook CreateFileA");
+	}
+	if (MH_CreateHook(&CreateFileW, Hook_CreateFileW, reinterpret_cast<LPVOID*>(&pCreateFileW)) != MH_OK)
+	{
+		puts("failed to hook CreateFileW");
+	}
+
 	GenerateDongleData(isTerminal);
 
-	// wtf is this??
+	// resolves a system error
 	injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
 
 	// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
@@ -782,20 +870,31 @@ static InitFunction Wmmt6Func([]()
 	}
 
 	// wtf is this?
-	injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
+	//injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
 
 	auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
-	injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
+	//injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
 
 	// First auth error skip
-	//injector::WriteMemory<BYTE>(imageBase + 0x6A0077, 0xEB, true);
+	injector::WriteMemory<BYTE>(imageBase + 0x6A0077, 0xEB, true);
 	
 	if (isTerminal)
 	{
+		// I don't know what these do but they stop the game from
+		// throwing a fit on the dongle error
+		// so I'm leaving them in here.
+
+		// Dongle error?
 		//safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+	
+		// More dongle error shit?
+		safeJMP(hook::get_pattern("8B 01 0F B6 40 78 C3 CC CC CC CC"), ReturnTrue);
 	}
 	else
 	{
+		// Terminal on same machine check.
+		injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2);
+
 		/*
 		injector::WriteMemory<WORD>(imageBase + 0x6A0C87, 0x00D1, true);		
 		injector::WriteMemory<BYTE>(imageBase + 0x20B88A, 0x90, true);

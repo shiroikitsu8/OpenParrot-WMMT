@@ -876,7 +876,7 @@ static InitFunction Wmmt6Func([]()
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
 	MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
 
-	// Hook the window procedure
+	// Hook the window procedurex
 	// (The image starts at 0x140000000)
 	//MH_CreateHook((void*)(imageBase + 0xB7C030), Hook_WndProc, (void**)&pMaxituneWndProc);
 	pMaxituneWndProc = (WindowProcedure_t)(imageBase + 0xB7C030);

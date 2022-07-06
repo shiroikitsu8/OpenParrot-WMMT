@@ -64,6 +64,9 @@ DWORD amJvsDataOffset = 0;
 HANDLE jvsHandle = (HANDLE)-1;
 bool JVSAlreadyTaken = false;
 
+LPCSTR wm6TouchPipe = "\\\\.\\pipe\\wm6_touch";
+LPCWSTR wm6TouchPipeW = L"\\\\.\\pipe\\wm6_touch";
+
 HANDLE __stdcall Hook_CreateFileA(LPCSTR lpFileName,
 	DWORD dwDesiredAccess,
 	DWORD dwShareMode,
@@ -72,6 +75,11 @@ HANDLE __stdcall Hook_CreateFileA(LPCSTR lpFileName,
 	DWORD dwFlagsAndAttributes,
 	HANDLE hTemplateFile)
 {
+	if (strcmp(lpFileName, "COM1") == 0)
+	{
+		return INVALID_HANDLE_VALUE;
+	}
+
 	if (strcmp(lpFileName, hookPort) == 0)
 	{
 #ifdef _DEBUG
@@ -137,6 +145,11 @@ HANDLE __stdcall Hook_CreateFileW(LPCWSTR lpFileName,
 	DWORD dwFlagsAndAttributes,
 	HANDLE hTemplateFile)
 {
+	if (wcscmp(lpFileName, L"COM1") == 0)
+	{
+		return INVALID_HANDLE_VALUE;
+	}
+
 	if (wcscmp(lpFileName, L"COM4") == 0 && !JVSAlreadyTaken)
 	{
 		HANDLE hResult = __CreateFileW(emuPortW,
@@ -340,6 +353,7 @@ static InitFunction jvsInit([]()
 	{
 		return;
 	}
+
 	if (GameDetect::currentGame == GameID::SFV || GameDetect::currentGame == GameID::FrenzyExpress)
 		return;
 	if (GameDetect::IsTypeX())

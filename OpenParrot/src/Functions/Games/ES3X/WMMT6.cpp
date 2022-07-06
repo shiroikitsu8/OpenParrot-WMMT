@@ -5,6 +5,7 @@
 #include <Utility/Hooking.Patterns.h>
 #include <thread>
 #include <iostream>
+#include <Windowsx.h>
 #ifdef _M_AMD64
 #pragma optimize("", off)
 #pragma comment(lib, "Ws2_32.lib")
@@ -259,62 +260,6 @@ static unsigned int Hook_hasp_read(int hasp_handle, int hasp_fileid, unsigned in
 
 static unsigned int Hook_hasp_write(int hasp_handle, int hasp_fileid, unsigned int offset, unsigned int length, unsigned char* buffer) {
 	return HASP_STATUS_OK;
-}
-
-typedef HANDLE(WINAPI* CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
-static CreateFileA_t pCreateFileA = NULL;
-
-static HANDLE WINAPI Hook_CreateFileA(
-	LPCSTR lpFileName,
-	DWORD dwDesiredAccess,
-	DWORD dwShareMode,
-	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-	DWORD dwCreationDisposition,
-	DWORD dwFlagsAndAttributes,
-	HANDLE hTemplateFile
-)
-{
-	MessageBoxW(NULL, L"CreateFileA", L"fuck", MB_OK | MB_ICONASTERISK);
-
-	printf("MT6_CreateFile:: filename=\"%s\" acc=%d mod=%d\n", lpFileName, dwDesiredAccess, dwShareMode);
-
-	return pCreateFileA(
-		lpFileName,
-		dwDesiredAccess,
-		dwShareMode,
-		lpSecurityAttributes,
-		dwCreationDisposition,
-		dwFlagsAndAttributes,
-		hTemplateFile
-	);
-}
-
-typedef HANDLE(WINAPI* CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
-static CreateFileW_t pCreateFileW = NULL;
-
-static HANDLE WINAPI Hook_CreateFileW(
-	LPCWSTR lpFileName,
-	DWORD dwDesiredAccess,
-	DWORD dwShareMode,
-	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-	DWORD dwCreationDisposition,
-	DWORD dwFlagsAndAttributes,
-	HANDLE hTemplateFile
-)
-{
-	MessageBoxW(NULL, L"CreateFileW", L"fuck", MB_OK | MB_ICONASTERISK);
-
-	printf("MT6_CreateFile:: filename=\"%S\" acc=%d mod=%d\n", lpFileName, dwDesiredAccess, dwShareMode);
-
-	return pCreateFileW(
-		lpFileName,
-		dwDesiredAccess,
-		dwShareMode,
-		lpSecurityAttributes,
-		dwCreationDisposition,
-		dwFlagsAndAttributes,
-		hTemplateFile
-	);
 }
 
 typedef int (WINAPI* BIND)(SOCKET, CONST SOCKADDR*, INT);
@@ -768,6 +713,39 @@ static DWORD WINAPI SpamMulticast(LPVOID)
 	*/
 }
 
+
+static HWND mt6Hwnd;
+
+typedef BOOL (WINAPI* ShowWindow_t)(HWND, int);
+static ShowWindow_t pShowWindow;
+
+
+// Hello Win32 my old friend...
+typedef LRESULT (WINAPI* WindowProcedure_t)(HWND, UINT, WPARAM, LPARAM);
+static WindowProcedure_t pMaxituneWndProc;
+
+static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	if (msg == WM_LBUTTONDOWN ||
+		msg == WM_LBUTTONUP)
+	{
+		int mx = GET_X_LPARAM(lParam);
+		int my = GET_Y_LPARAM(lParam);
+		printf("MOUSE %s (%d, %d)\n", msg == WM_LBUTTONDOWN ? "DOWN" : "UP  ", mx, my);
+		return 0;
+	}
+
+	return pMaxituneWndProc(hwnd, msg, wParam, lParam);
+}
+
+static BOOL Hook_ShowWindow(HWND hwnd, int nCmdShow)
+{
+	SetWindowLongPtrW(hwnd, -4, (LONG_PTR)Hook_WndProc);
+
+	mt6Hwnd = hwnd;
+	return pShowWindow(hwnd, nCmdShow);
+}
+
 extern int* ffbOffset;
 extern int* ffbOffset2;
 extern int* ffbOffset3;
@@ -809,6 +787,7 @@ static InitFunction Wmmt6Func([]()
 	// folder for path redirections
 	CreateDirectoryA(".\\TP", nullptr);
 
+	/*
 	FILE* fileF = _wfopen(L".\\TP\\setting.lua.gz", L"r");
 	if (fileF == NULL)
 	{
@@ -820,6 +799,7 @@ static InitFunction Wmmt6Func([]()
 	{
 		fclose(fileF);
 	}
+	*/
 
 	bool isTerminal = false;
 	if (ToBool(config["General"]["TerminalMode"]))
@@ -848,15 +828,16 @@ static InitFunction Wmmt6Func([]()
 	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
 	MH_CreateHook((void*)(imageBase + 0x35AAC0), MileageFix, (void**)&g_origMileageFix);
 
-	// Hook createfilea
-	if (MH_CreateHookApi(L"kernel32", "CreateFileA", Hook_CreateFileA, reinterpret_cast<LPVOID*>(&pCreateFileA)) != MH_OK)
-	{
-		puts("failed to hook CreateFileA");
-	}
-	if (MH_CreateHook(&CreateFileW, Hook_CreateFileW, reinterpret_cast<LPVOID*>(&pCreateFileW)) != MH_OK)
-	{
-		puts("failed to hook CreateFileW");
-	}
+	// CreateFile* hooks are in the JVS FILE
+
+
+	// Give me the HWND please maxitune
+	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
+
+	// Hook the window procedure
+	// (The image starts at 0x140000000)
+	//MH_CreateHook((void*)(imageBase + 0xB7C030), Hook_WndProc, (void**)&pMaxituneWndProc);
+	pMaxituneWndProc = (WindowProcedure_t)(imageBase + 0xB7C030);
 
 	GenerateDongleData(isTerminal);
 

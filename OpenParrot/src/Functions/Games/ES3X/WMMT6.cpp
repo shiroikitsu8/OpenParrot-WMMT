@@ -794,6 +794,7 @@ static BOOL Hook_ReadFile(
 
 		auto fuck = touchscreenBuffer.back();
 		// am I doing it right
+		*lpNumberRead = fuck.length;
 		memcpy(lpBuffer, fuck.data, fuck.length);
 
 		touchscreenBuffer.pop_back();

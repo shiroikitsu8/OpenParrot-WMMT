@@ -2,6 +2,7 @@
 #include <Utility/InitFunction.h>
 #include <Utility/GameDetect.h>
 #include "amJvs.h"
+#include <Utility/TouchSerial/MT6.h>
 #pragma optimize("", off)
 #include <MinHook.h>
 
@@ -64,8 +65,8 @@ DWORD amJvsDataOffset = 0;
 HANDLE jvsHandle = (HANDLE)-1;
 bool JVSAlreadyTaken = false;
 
-LPCSTR wm6TouchPipe = "\\\\.\\pipe\\wm6_touch";
-LPCWSTR wm6TouchPipeW = L"\\\\.\\pipe\\wm6_touch";
+HANDLE touchHandle = (HANDLE)-1;
+bool touchTaken = false;
 
 HANDLE __stdcall Hook_CreateFileA(LPCSTR lpFileName,
 	DWORD dwDesiredAccess,
@@ -75,11 +76,37 @@ HANDLE __stdcall Hook_CreateFileA(LPCSTR lpFileName,
 	DWORD dwFlagsAndAttributes,
 	HANDLE hTemplateFile)
 {
+	// Ignore CONOUT$ etc
+	// because those crash
+	//if (strnicmp(lpFileName, "CON", 3) != 0)
+	//{
+	//	printf("cfa %s\n", lpFileName);
+	//}
+
 	// Cheap hack for the touchscreen
 	// ReadFile checks handle
-	if (strcmp(lpFileName, "COM1") == 0)
+	if (stricmp(lpFileName, "\\\\.\\COM1") == 0)
 	{
-		return (HANDLE)0x02;
+		// Assume this is maxitune6...
+		// This *very* sucks, I'll write something better one day...
+
+		printf("flags %x\n", dwFlagsAndAttributes);
+		HANDLE hResult = __CreateFileA("\\\\.\\COM6",
+			dwDesiredAccess,
+			dwShareMode,
+			lpSecurityAttributes,
+			dwCreationDisposition,
+			dwFlagsAndAttributes,
+			hTemplateFile);
+		touchHandle = hResult;
+
+		if (!touchTaken)
+		{
+			mt6SerialTouchInit();
+		}
+
+		touchTaken = true;
+		return hResult;
 	}
 
 	if (strcmp(lpFileName, hookPort) == 0)
@@ -150,9 +177,30 @@ HANDLE __stdcall Hook_CreateFileW(LPCWSTR lpFileName,
 	// Cheap hack for WMMT6 touchscreen
 	// (It listens on COM1)
 	// Please fix this later, Luna of the future
-	if (wcscmp(lpFileName, L"COM1") == 0)
+	//if (wcsnicmp(lpFileName, L"CON", 3) != 0)
+	//{
+	//	printf("cfw %S\n", lpFileName);
+	//}
+
+	if (wcsicmp(lpFileName, L"\\\\.\\COM1") == 0)
 	{
-		return (HANDLE)0x2;
+		printf("flags %x\n", dwFlagsAndAttributes);
+		HANDLE hResult = __CreateFileW(L"\\\\.\\COM6",
+			dwDesiredAccess,
+			dwShareMode,
+			lpSecurityAttributes,
+			dwCreationDisposition,
+			dwFlagsAndAttributes,
+			hTemplateFile);
+		touchHandle = hResult;
+
+		if (!touchTaken)
+		{
+			mt6SerialTouchInit();
+		}
+
+		touchTaken = true;
+		return hResult;
 	}
 
 	if (wcscmp(lpFileName, L"COM4") == 0 && !JVSAlreadyTaken)
@@ -235,7 +283,7 @@ static std::set<HANDLE> g_commOverrides;
 
 static bool IsCommHooked(HANDLE hFile)
 {
-	return (hFile == jvsHandle || g_commOverrides.find(hFile) != g_commOverrides.end());
+	return (hFile == jvsHandle || hFile == touchHandle || g_commOverrides.find(hFile) != g_commOverrides.end());
 }
 
 void AddCommOverride(HANDLE hFile)
@@ -245,6 +293,14 @@ void AddCommOverride(HANDLE hFile)
 
 BOOL __stdcall Hook_SetCommState(HANDLE hFile, LPDCB lpDCB)
 {
+	if (hFile == touchHandle)
+	{
+		// copy
+		puts("Setting comm state for touch device");
+		__SetCommState(touchDevice, lpDCB);
+		return true;
+	}
+
 	if (!IsCommHooked(hFile)) {
 		return __SetCommState(hFile, lpDCB);
 	}

@@ -762,6 +762,7 @@ static __int64 __fastcall MileageFix(__int64 a1)
 	return g_origMileageFix(a1);
 }
 
+/*
 typedef struct {
 	char* data;
 	unsigned short length;
@@ -803,7 +804,12 @@ static BOOL Hook_ReadFile(
 
 	return pReadFile(hFile, lpBuffer, nMaxBytes, lpNumberRead, lpOverlapped);
 }
+*/
 
+static void mt6TouchSerialThread(HANDLE serialPort)
+{
+
+}
 
 
 static InitFunction Wmmt6Func([]()
@@ -827,14 +833,14 @@ static InitFunction Wmmt6Func([]()
 	std::wcerr.clear();
 	std::wcin.clear();
 
-	touchscreenBuffer = std::vector<touchscreendata_t>();
+	/*touchscreenBuffer = std::vector<touchscreendata_t>();
 
 	char startup_bytes[] = { 0x01, 0x30, 0x0d };
 	auto startup_data = touchscreendata_t{
 		startup_bytes, 3
 	};
 	printf("startup_data.length = %d\n", startup_data.length);
-	touchscreenBuffer.push_back(startup_data);
+	touchscreenBuffer.push_back(startup_data);*/
 
 	puts("hello there, maxitune");
 
@@ -887,7 +893,7 @@ static InitFunction Wmmt6Func([]()
 
 	// Give me the HWND please maxitune
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
-	MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
+	//MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
 
 	// Hook the window procedurex
 	// (The image starts at 0x140000000)

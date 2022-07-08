@@ -1,15 +1,6 @@
 #include "MT6.h"
 #include <vector>
 
-typedef struct {
-	unsigned short x;
-	unsigned short y;
-	char status;
-} touchscreenevent;
-
-static HANDLE vecMutex;
-static std::vector<touchscreenevent> eventVector;
-
 // FROM GAME
 char CMD_RESET[3] = {
 	0x01, 0x52, 0x0d
@@ -24,17 +15,35 @@ char OK_RESPONSE[3] = {
 	0x01, 0x30, 0x0d
 };
 
+static volatile BOOL bHasBooted = false;
+
+static volatile unsigned short touchx = 0;
+static volatile unsigned short touchy = 0;
+static volatile BOOL touchpressed = FALSE;
+static volatile BOOL touchlift = FALSE;
+
+void mt6SetTouchParams(unsigned short x, unsigned short y, BOOL down)
+{
+	if (bHasBooted)
+	{
+		touchx = x;
+		touchy = y;
+		touchpressed = down;
+	}
+}
+
 DWORD mt6WritePort(HANDLE port, char data[], unsigned length)
 {
 	DWORD numWritten = 0;
 	WriteFile(port, data, length, &numWritten, NULL);
+	//FlushFileBuffers(port);
 	return numWritten;
 }
 
 DWORD mt6SerialTouchThread(HANDLE port)
 {
 	char fileBuf[32];
-	puts("testing testing");
+	puts("starting serial touch thread");
 
 	/* {
 		char startupBuf[3] = { 0x01, 0x30, 0x0d };
@@ -49,6 +58,11 @@ DWORD mt6SerialTouchThread(HANDLE port)
 
 	for (;;)
 	{
+		if (times++ % 100 == 0)
+		{
+			puts("still going");
+		}
+
 		// Probably quite bad...
 		DWORD bytesRead = 0;
 		memset(fileBuf, 0, 32);
@@ -57,10 +71,53 @@ DWORD mt6SerialTouchThread(HANDLE port)
 
 		if (rfResult)
 		{
-			if (memcmp(fileBuf, CMD_RESET, 3) ||
-				memcmp(fileBuf, CMD_DIAGNOSTICS, 4))
+			BOOL packetRecognised = FALSE;
+			if (memcmp(fileBuf, CMD_RESET, 3))
 			{
+				bHasBooted = false;
+				packetRecognised = TRUE;
 				mt6WritePort(port, OK_RESPONSE, 3);
+			}
+
+			if (memcmp(fileBuf, CMD_DIAGNOSTICS, 4))
+			{
+				bHasBooted = true;
+				packetRecognised = TRUE;
+				mt6WritePort(port, OK_RESPONSE, 3);
+			}
+
+			if (!packetRecognised)
+			{
+				puts("unknown packet, responding with OK");
+				mt6WritePort(port, OK_RESPONSE, 3);
+			}
+		}
+
+		if (touchpressed)
+		{
+			touchlift = TRUE;
+			char touchResp[5];
+			memset(touchResp, 0, 5);
+			touchResp[0] = (char)0b11000000;
+			touchResp[1] = (touchx & 0b01111111);
+			touchResp[2] = ((touchx >> 8) & 0b01111111);
+			touchResp[3] = (touchy & 0b01111111);
+			touchResp[4] = ((touchy >> 8) & 0b01111111);
+			mt6WritePort(port, touchResp, 5);
+		}
+		else
+		{
+			if (touchlift)
+			{
+				char touchResp[5];
+				memset(touchResp, 0, 5);
+				touchResp[0] = (char)0b10000000;
+				touchResp[1] = (touchx & 0b01111111);
+				touchResp[2] = ((touchx >> 8) & 0b01111111);
+				touchResp[3] = (touchy & 0b01111111);
+				touchResp[4] = ((touchy >> 8) & 0b01111111);
+				mt6WritePort(port, touchResp, 5);
+				touchlift = false;
 			}
 		}
 
@@ -70,7 +127,7 @@ DWORD mt6SerialTouchThread(HANDLE port)
 
 void mt6SerialTouchInit()
 {
-	puts("testing outside thread");
+	puts("initialising 3m microtouch emulator on com11");
 	
 	touchDevice = CreateFileA("\\\\.\\COM11",
 		GENERIC_READ | GENERIC_WRITE,

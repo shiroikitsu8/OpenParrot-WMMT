@@ -6,6 +6,7 @@
 #include <thread>
 #include <iostream>
 #include <Windowsx.h>
+#include <Utility/TouchSerial/MT6.h>
 #ifdef _M_AMD64
 #pragma optimize("", off)
 #pragma comment(lib, "Ws2_32.lib")
@@ -729,8 +730,16 @@ static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	if (msg == WM_LBUTTONDOWN ||
 		msg == WM_LBUTTONUP)
 	{
-		int mx = GET_X_LPARAM(lParam);
-		int my = GET_Y_LPARAM(lParam);
+		unsigned short mx = GET_X_LPARAM(lParam);
+		unsigned short my = GET_Y_LPARAM(lParam);
+
+		unsigned short trueMy = 768 - my;
+		
+		mx *= (16383 / 1360);
+		trueMy *= (16383 / 1360);
+
+		mt6SetTouchParams(mx, trueMy, msg == WM_LBUTTONDOWN);
+
 		printf("MOUSE %s (%d, %d)\n", msg == WM_LBUTTONDOWN ? "DOWN" : "UP  ", mx, my);
 		return 0;
 	}

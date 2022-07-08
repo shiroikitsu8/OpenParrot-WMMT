@@ -733,12 +733,12 @@ static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		unsigned short mx = GET_X_LPARAM(lParam);
 		unsigned short my = GET_Y_LPARAM(lParam);
 
-		unsigned short trueMy = 768 - my;
+		//unsigned short trueMy = 768 - my;
 		
-		mx *= (16383 / 1360);
-		trueMy *= (16383 / 1360);
+		//mx *= (16383 / 1360);
+		//trueMy *= (16383 / 1360);
 
-		mt6SetTouchParams(mx, trueMy, msg == WM_LBUTTONDOWN);
+		mt6SetTouchParams(mx, my, msg == WM_LBUTTONDOWN);
 
 		printf("MOUSE %s (%d, %d)\n", msg == WM_LBUTTONDOWN ? "DOWN" : "UP  ", mx, my);
 		return 0;
@@ -778,56 +778,6 @@ static __int64 __fastcall MileageFix(__int64 a1)
 	return g_origMileageFix(a1);
 }
 
-/*
-typedef struct {
-	char* data;
-	unsigned short length;
-} touchscreendata_t;
-
-static std::vector<touchscreendata_t> touchscreenBuffer;
-
-typedef BOOL (WINAPI* ReadFile_t)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
-static ReadFile_t pReadFile;
-
-static BOOL Hook_ReadFile(
-	_In_ HANDLE hFile,
-	_Out_ LPVOID lpBuffer,
-	_In_ DWORD nMaxBytes,
-	_Out_opt_ LPDWORD lpNumberRead,
-	_Inout_opt_ LPOVERLAPPED lpOverlapped
-)
-{
-	if (hFile == (HANDLE)0x2)
-	{
-		if (&touchscreenBuffer == nullptr)
-			return 1;
-
-		// dear god I am about to do a Crime
-		if (touchscreenBuffer.empty())
-		{
-			*lpNumberRead = 0;
-			return 1;
-		}
-
-		auto fuck = touchscreenBuffer.back();
-		// am I doing it right
-		*lpNumberRead = fuck.length;
-		memcpy(lpBuffer, fuck.data, fuck.length);
-
-		touchscreenBuffer.pop_back();
-		return 1;
-	}
-
-	return pReadFile(hFile, lpBuffer, nMaxBytes, lpNumberRead, lpOverlapped);
-}
-*/
-
-static void mt6TouchSerialThread(HANDLE serialPort)
-{
-
-}
-
-
 static InitFunction Wmmt6Func([]()
 {
 	// Alloc debug console
@@ -848,15 +798,6 @@ static InitFunction Wmmt6Func([]()
 	std::wcout.clear();
 	std::wcerr.clear();
 	std::wcin.clear();
-
-	/*touchscreenBuffer = std::vector<touchscreendata_t>();
-
-	char startup_bytes[] = { 0x01, 0x30, 0x0d };
-	auto startup_data = touchscreendata_t{
-		startup_bytes, 3
-	};
-	printf("startup_data.length = %d\n", startup_data.length);
-	touchscreenBuffer.push_back(startup_data);*/
 
 	puts("hello there, maxitune");
 
@@ -970,9 +911,6 @@ static InitFunction Wmmt6Func([]()
 		}
 		*/
 	}
-
-	// Enable all print
-	//injector::WriteMemory<BYTE>(imageBase + 0x8B6B23, 0xEB, true);
 
 	// path fixes
 	injector::WriteMemoryRaw(imageBase + 0x12C5248, "TP", 2, true);

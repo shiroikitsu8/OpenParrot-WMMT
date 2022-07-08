@@ -131,8 +131,6 @@ DWORD mt6SerialTouchThread(HANDLE port)
 				puts("CMD_RESET");
 				bHasBooted = FALSE;
 				packetRecognised = TRUE;
-				Sleep(20);
-				PurgeComm(port, PURGE_TXCLEAR);
 				mt6WritePort(port, OK_RESPONSE, 3);
 			}
 
@@ -141,8 +139,6 @@ DWORD mt6SerialTouchThread(HANDLE port)
 				puts("CMD_DIAGNOSTICS");
 				bHasBooted = TRUE;
 				packetRecognised = TRUE;
-				Sleep(20);
-				PurgeComm(port, PURGE_TXCLEAR);
 				mt6WritePort(port, OK_RESPONSE, 3);
 			}
 

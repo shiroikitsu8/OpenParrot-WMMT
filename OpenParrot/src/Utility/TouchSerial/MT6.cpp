@@ -1,6 +1,8 @@
 #include "MT6.h"
 #include <vector>
 
+#define TS_PIPE_TIMEOUT 16
+
 // FROM GAME
 char CMD_RESET[3] = {
 	0x01, 0x52, 0x0d
@@ -15,12 +17,12 @@ char OK_RESPONSE[3] = {
 	0x01, 0x30, 0x0d
 };
 
-static volatile BOOL bHasBooted = FALSE;
+volatile BOOL bHasBooted = FALSE;
 
-static volatile unsigned short touchx = 0;
-static volatile unsigned short touchy = 0;
-static volatile BOOL touchpressed = FALSE;
-static volatile BOOL touchlift = FALSE;
+volatile unsigned short touchx = 0;
+volatile unsigned short touchy = 0;
+volatile BOOL touchpressed = FALSE;
+volatile BOOL touchlift = FALSE;
 
 void mt6SetTouchParams(unsigned short x, unsigned short y, BOOL down)
 {
@@ -35,8 +37,35 @@ void mt6SetTouchParams(unsigned short x, unsigned short y, BOOL down)
 DWORD mt6WritePort(HANDLE port, char data[], unsigned length)
 {
 	DWORD numWritten = 0;
-	BOOL status = WriteFile(port, data, length, &numWritten, NULL);
-	printf("status=%d written=%d\n", status, numWritten);
+
+	OVERLAPPED ol = { 0, 0, 0, 0, NULL };
+	ol.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+	BOOL status = WriteFile(port, data, length, &numWritten, &ol);
+	DWORD xferBytes = 0;
+
+	if (!status)
+	{
+		switch (GetLastError())
+		{
+		case ERROR_SUCCESS:
+			break;
+		case ERROR_IO_PENDING:
+			// Wait for 16ms
+			if (WaitForSingleObject(ol.hEvent, TS_PIPE_TIMEOUT) == WAIT_OBJECT_0)
+			{
+				status = GetOverlappedResult(port, &ol, &xferBytes, FALSE);
+			}
+			else
+			{
+				CancelIo(port);
+			}
+			break;
+		}
+	}
+
+	CloseHandle(ol.hEvent);
+
 	FlushFileBuffers(port);
 	return numWritten;
 }
@@ -46,29 +75,46 @@ DWORD mt6SerialTouchThread(HANDLE port)
 	char fileBuf[32];
 	puts("starting serial touch thread");
 
-	/* {
-		char startupBuf[3] = { 0x01, 0x30, 0x0d };
-		DWORD startupBufWrite = 0;
-		LPOVERLAPPED ol = (LPOVERLAPPED)malloc(sizeof(OVERLAPPED));
-		memset(ol, 0, sizeof(OVERLAPPED));
-		WriteFile(port, startupBuf, 3, &startupBufWrite, ol);
-		printf("written %d startup bytes\n", startupBufWrite);
-	}*/
-
 	DWORD times = 0;
 
 	for (;;)
 	{
-		if (times++ % 100 == 0)
-		{
-			puts("still going");
-		}
-
-		// Probably quite bad...
 		DWORD bytesRead = 0;
 		memset(fileBuf, 0, 32);
 
-		BOOL rfResult = ReadFile(port, fileBuf, 32, &bytesRead, NULL);
+		OVERLAPPED ol = { 0, 0, 0, 0, NULL };
+		BOOL ret = 0;
+		ol.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+		BOOL rfResult = ReadFile(port, fileBuf, 32, &bytesRead, &ol);
+		DWORD xferBytes = 0;
+
+		if (!rfResult)
+		{
+			switch (GetLastError())
+			{
+			case ERROR_SUCCESS:
+				break;
+			case ERROR_IO_PENDING:
+				// Wait for 16ms
+				if (WaitForSingleObject(ol.hEvent, TS_PIPE_TIMEOUT) == WAIT_OBJECT_0)
+				{
+					rfResult = GetOverlappedResult(port, &ol, &xferBytes, FALSE);
+				}
+				else
+				{
+					CancelIo(port);
+				}
+				break;
+			}
+		}
+
+		CloseHandle(ol.hEvent);
+
+		if (xferBytes > 0)
+		{
+			printf("IN: xferred %d bytes\n", xferBytes);
+		}
 
 		if (bytesRead > 0)
 		{
@@ -145,7 +191,7 @@ DWORD mt6SerialNamedPipeServer(LPVOID _)
 
 	HANDLE pipe = CreateNamedPipeW(
 		L"\\\\.\\pipe\\mt6-touchemu",
-		PIPE_ACCESS_DUPLEX,
+		PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
 		PIPE_TYPE_BYTE | PIPE_WAIT,
 		PIPE_UNLIMITED_INSTANCES,
 		255,

@@ -756,6 +756,13 @@ static BOOL Hook_ShowWindow(HWND hwnd, int nCmdShow)
 	return pShowWindow(hwnd, nCmdShow);
 }
 
+typedef void (WINAPI* OutputDebugStringA_t)(LPCSTR);
+
+static void Hook_OutputDebugStringA(LPCSTR str)
+{
+	printf("debug> %s", str);
+}
+
 extern int* ffbOffset;
 extern int* ffbOffset2;
 extern int* ffbOffset3;
@@ -897,6 +904,7 @@ static InitFunction Wmmt6Func([]()
 	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
 	MH_CreateHook((void*)(imageBase + 0x35AAC0), MileageFix, (void**)&g_origMileageFix);
 
+	MH_CreateHookApi(L"kernel32", "OutputDebugStringA", Hook_OutputDebugStringA, NULL);
 	// CreateFile* hooks are in the JVS FILE
 
 
@@ -928,7 +936,7 @@ static InitFunction Wmmt6Func([]()
 
 	// First auth error skip
 	injector::WriteMemory<BYTE>(imageBase + 0x6A0077, 0xEB, true);
-	
+
 	if (isTerminal)
 	{
 		// I don't know what these do but they stop the game from
@@ -964,7 +972,7 @@ static InitFunction Wmmt6Func([]()
 	}
 
 	// Enable all print
-	injector::WriteMemory<BYTE>(imageBase + 0x8B6B23, 0xEB, true);
+	//injector::WriteMemory<BYTE>(imageBase + 0x8B6B23, 0xEB, true);
 
 	// path fixes
 	injector::WriteMemoryRaw(imageBase + 0x12C5248, "TP", 2, true);

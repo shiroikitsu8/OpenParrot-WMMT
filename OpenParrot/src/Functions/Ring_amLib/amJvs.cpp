@@ -89,9 +89,12 @@ HANDLE __stdcall Hook_CreateFileA(LPCSTR lpFileName,
 	{
 		// Assume this is maxitune6...
 		// This *very* sucks, I'll write something better one day...
+		if (!touchTaken)
+		{
+			mt6SerialTouchInit();
+		}
 
-		printf("flags %x\n", dwFlagsAndAttributes);
-		HANDLE hResult = __CreateFileA("\\\\.\\COM6",
+		HANDLE hResult = __CreateFileA("\\\\.\\pipe\\mt6-touchemu",
 			dwDesiredAccess,
 			dwShareMode,
 			lpSecurityAttributes,
@@ -99,12 +102,6 @@ HANDLE __stdcall Hook_CreateFileA(LPCSTR lpFileName,
 			dwFlagsAndAttributes,
 			hTemplateFile);
 		touchHandle = hResult;
-
-		if (!touchTaken)
-		{
-			mt6SerialTouchInit();
-		}
-
 		touchTaken = true;
 		return hResult;
 	}
@@ -184,21 +181,20 @@ HANDLE __stdcall Hook_CreateFileW(LPCWSTR lpFileName,
 
 	if (wcsicmp(lpFileName, L"\\\\.\\COM1") == 0)
 	{
-		printf("flags %x\n", dwFlagsAndAttributes);
-		HANDLE hResult = __CreateFileW(L"\\\\.\\COM6",
+		if (!touchTaken)
+		{
+			mt6SerialTouchInit();
+		}
+
+		HANDLE hResult = __CreateFileW(L"\\\\.\\pipe\\mt6-touchemu",
 			dwDesiredAccess,
 			dwShareMode,
 			lpSecurityAttributes,
 			dwCreationDisposition,
 			dwFlagsAndAttributes,
 			hTemplateFile);
+
 		touchHandle = hResult;
-
-		if (!touchTaken)
-		{
-			mt6SerialTouchInit();
-		}
-
 		touchTaken = true;
 		return hResult;
 	}
@@ -293,14 +289,6 @@ void AddCommOverride(HANDLE hFile)
 
 BOOL __stdcall Hook_SetCommState(HANDLE hFile, LPDCB lpDCB)
 {
-	if (hFile == touchHandle)
-	{
-		// copy
-		puts("Setting comm state for touch device");
-		__SetCommState(touchDevice, lpDCB);
-		return true;
-	}
-
 	if (!IsCommHooked(hFile)) {
 		return __SetCommState(hFile, lpDCB);
 	}

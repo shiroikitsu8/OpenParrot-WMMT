@@ -797,6 +797,77 @@ extern int* ffbOffset2;
 extern int* ffbOffset3;
 extern int* ffbOffset4;
 
+typedef INT (WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
+static WsaStringToAddressA_t gWsaStringToAddressA;
+
+static INT WSAAPI Hook_WsaStringToAddressA(
+	_In_ LPSTR AddressString,
+	_In_ INT AddressFamily,
+	_In_opt_ LPWSAPROTOCOL_INFOA lpProtocolInfo,
+	_Out_ LPSOCKADDR lpAddress,
+	_Inout_ LPINT lpAddressLength
+)
+{
+	if (strcmp(AddressString, "192.168.92.254") == 0)
+	{
+		return gWsaStringToAddressA(
+			"127.0.0.1",
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.253") == 0)
+	{
+		return gWsaStringToAddressA(
+			"127.0.0.1",
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.20") == 0)
+	{
+		return gWsaStringToAddressA(
+			"127.0.0.1",
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	return gWsaStringToAddressA(
+		AddressString,
+		AddressFamily,
+		lpProtocolInfo,
+		lpAddress,
+		lpAddressLength
+	);
+}
+
+typedef INT (WSAAPI* getaddrinfo_t)(PCSTR, PCSTR, const ADDRINFOA*, PADDRINFOA*);
+static getaddrinfo_t ggetaddrinfo;
+
+static INT WSAAPI Hook_getaddrinfo(
+	_In_opt_ PCSTR pNodeName,
+	_In_opt_ PCSTR pServiceName,
+	_In_opt_ const ADDRINFOA* pHints,
+	_Out_ PADDRINFOA* ppResult
+)
+{
+	if (strcmp(pNodeName, "192.168.92.253") == 0)
+	{
+		return ggetaddrinfo("127.0.0.1", pServiceName, pHints, ppResult);
+	}
+
+	return ggetaddrinfo(pNodeName, pServiceName, pHints, ppResult);
+}
+
 static __int64(__fastcall* g_origMileageFix)(__int64);
 
 static __int64 __fastcall MileageFix(__int64 a1)
@@ -877,6 +948,10 @@ static InitFunction Wmmt6Func([]()
 	MH_CreateHookApi(L"kernel32", "OutputDebugStringA", Hook_OutputDebugStringA, NULL);
 	// CreateFile* hooks are in the JVS FILE
 
+
+	// Network hooks
+	MH_CreateHookApi(L"Ws2_32", "WSAStringToAddressA", Hook_WsaStringToAddressA, reinterpret_cast<LPVOID*>(&gWsaStringToAddressA));
+	MH_CreateHookApi(L"Ws2_32", "getaddrinfo", Hook_getaddrinfo, reinterpret_cast<LPVOID*>(&ggetaddrinfo));
 
 	// Give me the HWND please maxitune
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));

@@ -811,7 +811,7 @@ static INT WSAAPI Hook_WsaStringToAddressA(
 	if (strcmp(AddressString, "192.168.92.254") == 0)
 	{
 		return gWsaStringToAddressA(
-			"127.0.0.1",
+			"192.168.86.1",
 			AddressFamily,
 			lpProtocolInfo,
 			lpAddress,
@@ -822,7 +822,7 @@ static INT WSAAPI Hook_WsaStringToAddressA(
 	if (strcmp(AddressString, "192.168.92.253") == 0)
 	{
 		return gWsaStringToAddressA(
-			"127.0.0.1",
+			"192.168.86.1",
 			AddressFamily,
 			lpProtocolInfo,
 			lpAddress,
@@ -860,9 +860,9 @@ static INT WSAAPI Hook_getaddrinfo(
 	_Out_ PADDRINFOA* ppResult
 )
 {
-	if (strcmp(pNodeName, "192.168.92.253") == 0)
+	if (pNodeName && strcmp(pNodeName, "192.168.92.253") == 0)
 	{
-		return ggetaddrinfo("127.0.0.1", pServiceName, pHints, ppResult);
+		return ggetaddrinfo("192.168.86.1", pServiceName, pHints, ppResult);
 	}
 
 	return ggetaddrinfo(pNodeName, pServiceName, pHints, ppResult);
@@ -957,7 +957,7 @@ static InitFunction Wmmt6Func([]()
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
 	//MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
 
-	// Hook the window procedurex
+	// Hook the window procedure
 	// (The image starts at 0x140000000)
 	//MH_CreateHook((void*)(imageBase + 0xB7C030), Hook_WndProc, (void**)&pMaxituneWndProc);
 	pMaxituneWndProc = (WindowProcedure_t)(imageBase + 0xB7C030);
@@ -980,7 +980,7 @@ static InitFunction Wmmt6Func([]()
 	//injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
 
 	// First auth error skip
-	injector::WriteMemory<BYTE>(imageBase + 0x6A0077, 0xEB, true);
+	//injector::WriteMemory<BYTE>(imageBase + 0x6A0077, 0xEB, true);
 
 	if (isTerminal)
 	{

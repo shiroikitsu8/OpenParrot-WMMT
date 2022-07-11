@@ -288,275 +288,12 @@ static unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen
 	}
 }
 
-static unsigned char saveData[0x2000];
-static bool saveOk = false;
-static unsigned char carData[0xFF];
-
-static int SaveOk()
-{
-	saveOk = true;
-	return 1;
-}
-
-static char carFileName[0xFF];
-static bool loadOk = false;
-static bool customCar = false;
-
-static uintptr_t SaveLocation = 0x1E183F8;
-
-static int SaveGameData()
-{
-	/*
-	if (!saveOk)
-		return 1;
-
-	memset(saveData, 0, 0x2000);
-	uintptr_t value = *(uintptr_t*)(imageBase + SaveLocation);
-	value = *(uintptr_t*)(value + 0x178);
-	memcpy(saveData, (void*)value, 0x340);
-	FILE* file = fopen("openprogress.sav", "wb");
-	fwrite(saveData, 1, 0x2000, file);
-	fclose(file);
-
-	// Car Profile saving
-	memset(carData, 0, 0xFF);
-	memset(carFileName, 0, 0xFF);
-	memcpy(carData, (void*) * (uintptr_t*)(*(uintptr_t*)(imageBase + SaveLocation) + 0x2D8), 0xE0);
-	CreateDirectoryA("OpenParrot_Cars", nullptr);
-	if (customCar)
-	{
-		sprintf(carFileName, ".\\OpenParrot_Cars\\custom.car");
-	}
-	else
-	{
-		sprintf(carFileName, ".\\OpenParrot_Cars\\%08X.car", *(DWORD*)(*(uintptr_t*)(*(uintptr_t*)(imageBase + SaveLocation) + 0x2D8) + 0x34));
-	}
-	FILE* carSave = fopen(carFileName, "wb");
-	fwrite(carData, 1, 0xE0, file);
-	fclose(carSave);
-
-	FILE* fmileage = fopen("mileage.sav", "wb");
-	fwrite(&mileageValue, 1, 0x4, fmileage);
-	fclose(fmileage);
-
-	saveOk = false;
-	return 1;
-	*/
-}
-
-static uintptr_t saveGameOffset;
-
-static int LoadGameData()
-{
-	/*
-	saveOk = false;
-	memset(saveData, 0x0, 0x2000);
-	FILE* file = fopen("openprogress.sav", "rb");
-	if (file)
-	{
-		fseek(file, 0, SEEK_END);
-		int fsize = ftell(file);
-		if (fsize == 0x2000)
-		{
-			fseek(file, 0, SEEK_SET);
-			fread(saveData, fsize, 1, file);
-			uintptr_t value = *(uintptr_t*)(imageBase + SaveLocation);
-			value = *(uintptr_t*)(value + 0x178);
-
-			*(DWORD_PTR*)(value + 0x08) = *(DWORD_PTR*)(saveData + 0x08);
-			*(DWORD_PTR*)(value + 0x18) = *(DWORD_PTR*)(saveData + 0x18);
-			*(DWORD_PTR*)(value + 0x28) = *(DWORD_PTR*)(saveData + 0x28);
-			*(DWORD_PTR*)(value + 0x38) = *(DWORD_PTR*)(saveData + 0x38);
-			*(DWORD_PTR*)(value + 0x48) = *(DWORD_PTR*)(saveData + 0x48);
-			*(DWORD_PTR*)(value + 0x60) = *(DWORD_PTR*)(saveData + 0x60);
-			*(DWORD*)(value + 0x70) = *(DWORD*)(saveData + 0x70);
-			*(DWORD_PTR*)(value + 0x74) = *(DWORD_PTR*)(saveData + 0x74);
-			*(DWORD_PTR*)(value + 0x78) = *(DWORD_PTR*)(saveData + 0x78);
-			*(DWORD_PTR*)(value + 0x80) = *(DWORD_PTR*)(saveData + 0x80);
-			*(DWORD_PTR*)(value + 0x88) = *(DWORD_PTR*)(saveData + 0x88);
-			*(DWORD_PTR*)(value + 0x98) = *(DWORD_PTR*)(saveData + 0x98);
-			*(DWORD_PTR*)(value + 0xA8) = *(DWORD_PTR*)(saveData + 0xA8);
-			*(DWORD_PTR*)(value + 0xB8) = *(DWORD_PTR*)(saveData + 0xB8);
-			*(DWORD_PTR*)(value + 0xD8) = *(DWORD_PTR*)(saveData + 0xD8);
-			*(DWORD_PTR*)(value + 0xE8) = *(DWORD_PTR*)(saveData + 0xE8);
-			*(DWORD_PTR*)(value + 0xF0) = *(DWORD_PTR*)(saveData + 0xF0);
-			*(DWORD_PTR*)(value + 0xF8) = *(DWORD_PTR*)(saveData + 0xF8);
-			*(DWORD_PTR*)(value + 0x108) = *(DWORD_PTR*)(saveData + 0x108);
-			*(DWORD_PTR*)(value + 0x110) = *(DWORD_PTR*)(saveData + 0x110);
-			*(DWORD_PTR*)(value + 0x118) = *(DWORD_PTR*)(saveData + 0x118);
-			*(DWORD_PTR*)(value + 0x128) = *(DWORD_PTR*)(saveData + 0x128);
-			*(DWORD_PTR*)(value + 0x130) = *(DWORD_PTR*)(saveData + 0x130);
-			*(DWORD_PTR*)(value + 0x138) = *(DWORD_PTR*)(saveData + 0x138);
-			*(DWORD_PTR*)(value + 0x140) = *(DWORD_PTR*)(saveData + 0x140);
-			*(DWORD_PTR*)(value + 0x148) = *(DWORD_PTR*)(saveData + 0x148);
-			*(DWORD_PTR*)(value + 0x158) = *(DWORD_PTR*)(saveData + 0x158);
-			*(DWORD_PTR*)(value + 0x160) = *(DWORD_PTR*)(saveData + 0x160);
-			*(DWORD_PTR*)(value + 0x168) = *(DWORD_PTR*)(saveData + 0x168);
-			*(DWORD_PTR*)(value + 0x170) = *(DWORD_PTR*)(saveData + 0x170);
-			*(DWORD_PTR*)(value + 0x180) = *(DWORD_PTR*)(saveData + 0x180);
-			*(DWORD_PTR*)(value + 0x188) = *(DWORD_PTR*)(saveData + 0x188);
-			*(DWORD_PTR*)(value + 0x198) = *(DWORD_PTR*)(saveData + 0x198);
-			*(DWORD_PTR*)(value + 0x1A8) = *(DWORD_PTR*)(saveData + 0x1A8);
-			*(DWORD_PTR*)(value + 0x1B0) = *(DWORD_PTR*)(saveData + 0x1B0);
-			*(DWORD_PTR*)(value + 0x1C0) = *(DWORD_PTR*)(saveData + 0x1C0);
-			*(DWORD_PTR*)(value + 0x1D0) = *(DWORD_PTR*)(saveData + 0x1D0);
-			*(DWORD_PTR*)(value + 0x1D8) = *(DWORD_PTR*)(saveData + 0x1D8);
-			*(DWORD_PTR*)(value + 0x1E8) = *(DWORD_PTR*)(saveData + 0x1E8);
-			*(DWORD_PTR*)(value + 0x1F8) = *(DWORD_PTR*)(saveData + 0x1F8);
-			*(DWORD_PTR*)(value + 0x200) = *(DWORD_PTR*)(saveData + 0x200);
-			*(DWORD_PTR*)(value + 0x210) = *(DWORD_PTR*)(saveData + 0x210);
-			*(DWORD_PTR*)(value + 0x220) = *(DWORD_PTR*)(saveData + 0x220);
-			*(DWORD_PTR*)(value + 0x228) = *(DWORD_PTR*)(saveData + 0x228);
-			*(DWORD_PTR*)(value + 0x238) = *(DWORD_PTR*)(saveData + 0x238);
-			*(DWORD_PTR*)(value + 0x248) = *(DWORD_PTR*)(saveData + 0x248);
-			*(DWORD_PTR*)(value + 0x250) = *(DWORD_PTR*)(saveData + 0x250);
-			*(DWORD_PTR*)(value + 0x260) = *(DWORD_PTR*)(saveData + 0x260);
-			*(DWORD_PTR*)(value + 0x278) = *(DWORD_PTR*)(saveData + 0x278);
-			*(DWORD_PTR*)(value + 0x288) = *(DWORD_PTR*)(saveData + 0x288);
-			*(DWORD_PTR*)(value + 0x298) = *(DWORD_PTR*)(saveData + 0x298);
-			*(DWORD_PTR*)(value + 0x2A8) = *(DWORD_PTR*)(saveData + 0x2A8);
-
-			loadOk = true;
-		}
-		fclose(file);
-	}
-
-	FILE* fmileage = fopen("mileage.sav", "rb");
-	if (fmileage)
-	{
-		fseek(fmileage, 0, SEEK_END);
-		int fsize = ftell(fmileage);
-		if (fsize == 4)
-		{
-			fseek(fmileage, 0, SEEK_SET);
-			fread(&mileageValue, 4, 1, fmileage);
-		}
-		fclose(fmileage);
-	}
-	return 1;
-	*/
-}
-
 static BOOL FileExists(char* szPath)
 {
 	DWORD dwAttrib = GetFileAttributesA(szPath);
 
 	return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
 		!(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
-}
-
-static DWORD WINAPI SpamCarTuneNeons(LPVOID)
-{
-	/*
-	while (true)
-	{
-		Sleep(16);
-
-		uintptr_t carSaveLocation = *(uintptr_t*)((*(uintptr_t*)(imageBase + SaveLocation)) + 0x2D8);
-
-		if (ForceNeon)
-		injector::WriteMemory<BYTE>(carSaveLocation + 0x60, NeonColour, true);
-
-		if (ForceFullTune)
-		{
-			injector::WriteMemory<BYTE>(carSaveLocation + 0x74, 0x11, true);
-			injector::WriteMemory<BYTE>(carSaveLocation + 0x80, 0x11, true);
-		}	
-	}
-	*/
-}
-
-static void LoadWmmt5CarData()
-{
-	/*
-	if (!loadOk)
-		return;
-	customCar = false;
-	memset(carData, 0, 0xFF);
-	memset(carFileName, 0, 0xFF);
-	CreateDirectoryA("OpenParrot_Cars", nullptr);
-
-	// check for custom car
-	sprintf(carFileName, ".\\OpenParrot_Cars\\custom.car");
-	if (FileExists(carFileName))
-	{
-		FILE* file = fopen(carFileName, "rb");
-		if (file)
-		{
-			fseek(file, 0, SEEK_END);
-			int fsize = ftell(file);
-			if (fsize == 0xE0)
-			{
-				fseek(file, 0, SEEK_SET);
-				fread(carData, fsize, 1, file);
-				uintptr_t carSaveLocation = *(uintptr_t*)((*(uintptr_t*)(imageBase + SaveLocation)) + 0x2D8);
-				memcpy((void*)(carSaveLocation + 0x08), carData + 0x08, 8);
-				memcpy((void*)(carSaveLocation + 0x18), carData + 0x18, 8);
-				memcpy((void*)(carSaveLocation + 0x28), carData + 0x28, 8);
-				memcpy((void*)(carSaveLocation + 0x30), carData + 0x30, 8);
-				memcpy((void*)(carSaveLocation + 0x40), carData + 0x40, 8);
-				memcpy((void*)(carSaveLocation + 0x48), carData + 0x48, 8);
-				memcpy((void*)(carSaveLocation + 0x58), carData + 0x58, 8);
-				memcpy((void*)(carSaveLocation + 0x60), carData + 0x60, 8);
-				memcpy((void*)(carSaveLocation + 0x68), carData + 0x68, 8);
-				memcpy((void*)(carSaveLocation + 0x70), carData + 0x70, 8);
-				memcpy((void*)(carSaveLocation + 0x80), carData + 0x80, 8);
-				memcpy((void*)(carSaveLocation + 0x90), carData + 0x90, 8);
-				memcpy((void*)(carSaveLocation + 0x98), carData + 0x98, 8);
-				memcpy((void*)(carSaveLocation + 0xB0), carData + 0xB0, 8);
-				memcpy((void*)(carSaveLocation + 0xC8), carData + 0xC8, 8);
-				customCar = true;
-			}
-			loadOk = false;
-			fclose(file);
-			return;
-		}
-	}
-
-	memset(carFileName, 0, 0xFF);
-	// Load actual car if available
-	sprintf(carFileName, ".\\OpenParrot_Cars\\%08X.car", *(DWORD*)(*(uintptr_t*)(*(uintptr_t*)(imageBase + SaveLocation) + 0x2D8) + 0x34));
-	if (FileExists(carFileName))
-	{
-		FILE* file = fopen(carFileName, "rb");
-		if (file)
-		{
-			fseek(file, 0, SEEK_END);
-			int fsize = ftell(file);
-			if (fsize == 0xE0)
-			{
-				fseek(file, 0, SEEK_SET);
-				fread(carData, fsize, 1, file);
-				uintptr_t carSaveLocation = *(uintptr_t*)((*(uintptr_t*)(imageBase + SaveLocation)) + 0x2D8);
-				memcpy((void*)(carSaveLocation + 0x08), carData + 0x08, 8);
-				memcpy((void*)(carSaveLocation + 0x18), carData + 0x18, 8);
-				memcpy((void*)(carSaveLocation + 0x28), carData + 0x28, 8);
-				memcpy((void*)(carSaveLocation + 0x30), carData + 0x30, 8);
-				memcpy((void*)(carSaveLocation + 0x40), carData + 0x40, 8);
-				memcpy((void*)(carSaveLocation + 0x48), carData + 0x48, 8);
-				memcpy((void*)(carSaveLocation + 0x58), carData + 0x58, 8);
-				memcpy((void*)(carSaveLocation + 0x60), carData + 0x60, 8);
-				memcpy((void*)(carSaveLocation + 0x68), carData + 0x68, 8);
-				memcpy((void*)(carSaveLocation + 0x70), carData + 0x70, 8);
-				memcpy((void*)(carSaveLocation + 0x80), carData + 0x80, 8);
-				memcpy((void*)(carSaveLocation + 0x90), carData + 0x90, 8);
-				memcpy((void*)(carSaveLocation + 0x98), carData + 0x98, 8);
-				memcpy((void*)(carSaveLocation + 0xB0), carData + 0xB0, 8);
-				memcpy((void*)(carSaveLocation + 0xC8), carData + 0xC8, 8);
-			}
-			fclose(file);
-		}
-	}
-	if (ForceFullTune || ForceNeon)
-	{
-		if (!CarTuneNeonThread)
-		{
-			CarTuneNeonThread = true;
-			CreateThread(0, 0, SpamCarTuneNeons, 0, 0, 0);
-		}
-	}
-	loadOk = false;
-	*/
 }
 
 static int ReturnTrue()
@@ -606,114 +343,6 @@ static void GenerateDongleData(bool isTerminal)
 		hasp_buffer[0xD3F] = hasp_buffer[0xD3E] ^ 0xFF;
 	}
 }
-
-static char customName[256];
-
-
-static DWORD WINAPI SpamCustomName(LPVOID)
-{
-	/*
-	while (true)
-	{
-		Sleep(50);
-		void* value = (void*)(imageBase + 0x1E19EE0);
-		memcpy(value, customName, strlen(customName) + 1);
-	}
-	*/
-}
-
-static DWORD WINAPI SpamMulticast(LPVOID)
-{
-	/*
-	WSADATA wsaData;
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
-
-	SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
-	int ttl = 255;
-	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (char*)& ttl, sizeof(ttl));
-
-	int reuse = 1;
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)& reuse, sizeof(reuse));
-
-	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (char*)& reuse, sizeof(reuse));
-
-	sockaddr_in bindAddr = { 0 };
-	bindAddr.sin_family = AF_INET;
-	bindAddr.sin_addr.s_addr = inet_addr(ipaddr);
-	bindAddr.sin_port = htons(50765);
-	bind(sock, (sockaddr*)& bindAddr, sizeof(bindAddr));
-
-
-	ip_mreq mreq;
-	mreq.imr_multiaddr.s_addr = inet_addr("225.0.0.1");
-	mreq.imr_interface.s_addr = inet_addr(ipaddr);
-
-	setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)& mreq, sizeof(mreq));
-
-	const uint8_t* byteSequences_Free[] = {
-		terminalPackage1_Free,
-		terminalPackage2_Free,
-		terminalPackage3_Free,
-		terminalPackage4_Free,
-		terminalPackage5_Free,
-		terminalPackage6_Free,
-	};
-
-	const size_t byteSizes_Free[] = {
-		sizeof(terminalPackage1_Free),
-		sizeof(terminalPackage2_Free),
-		sizeof(terminalPackage3_Free),
-		sizeof(terminalPackage4_Free),
-		sizeof(terminalPackage5_Free),
-		sizeof(terminalPackage6_Free),
-	};
-
-	const uint8_t* byteSequences_Coin[] = {
-		terminalPackage1_Coin,
-		terminalPackage2_Coin,
-		terminalPackage3_Coin,
-		terminalPackage4_Coin,
-		terminalPackage5_Coin,
-		terminalPackage6_Coin,
-	};
-
-	const size_t byteSizes_Coin[] = {
-		sizeof(terminalPackage1_Coin),
-		sizeof(terminalPackage2_Coin),
-		sizeof(terminalPackage3_Coin),
-		sizeof(terminalPackage4_Coin),
-		sizeof(terminalPackage5_Coin),
-		sizeof(terminalPackage6_Coin),
-	};
-
-	sockaddr_in toAddr = { 0 };
-	toAddr.sin_family = AF_INET;
-	toAddr.sin_addr.s_addr = inet_addr("225.0.0.1");
-	toAddr.sin_port = htons(50765);
-
-
-	isFreePlay = ToBool(config["General"]["FreePlay"]);
-	isEventMode2P = ToBool(config["TerminalEmuConfig"]["2P Event Mode"]);
-	isEventMode4P = ToBool(config["TerminalEmuConfig"]["4P Event Mode"]);
-
-	if (isFreePlay)
-	{
-		while (true) for (int i = 0; i < _countof(byteSequences_Free); i++)
-		{
-			sendto(sock, (const char*)byteSequences_Free[i], byteSizes_Free[i], 0, (sockaddr*)&toAddr, sizeof(toAddr));
-			Sleep(8);
-		}		
-	}
-
-	while (true) for (int i = 0; i < _countof(byteSequences_Coin); i++)
-	{
-		sendto(sock, (const char*)byteSequences_Coin[i], byteSizes_Coin[i], 0, (sockaddr*)& toAddr, sizeof(toAddr));
-		Sleep(8);
-	}
-	*/
-}
-
 
 static HWND mt6Hwnd;
 
@@ -800,6 +429,10 @@ extern int* ffbOffset4;
 typedef INT (WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
 static WsaStringToAddressA_t gWsaStringToAddressA;
 
+#define LOCAL_IP "192.168.0.109"
+#define ROUTER_IP "192.168.0.1"
+#define LOCALHOST "127.0.0.1"
+
 static INT WSAAPI Hook_WsaStringToAddressA(
 	_In_ LPSTR AddressString,
 	_In_ INT AddressFamily,
@@ -811,7 +444,7 @@ static INT WSAAPI Hook_WsaStringToAddressA(
 	if (strcmp(AddressString, "192.168.92.254") == 0)
 	{
 		return gWsaStringToAddressA(
-			"192.168.86.1",
+			ROUTER_IP,
 			AddressFamily,
 			lpProtocolInfo,
 			lpAddress,
@@ -822,7 +455,7 @@ static INT WSAAPI Hook_WsaStringToAddressA(
 	if (strcmp(AddressString, "192.168.92.253") == 0)
 	{
 		return gWsaStringToAddressA(
-			"192.168.86.1",
+			ROUTER_IP,
 			AddressFamily,
 			lpProtocolInfo,
 			lpAddress,
@@ -833,7 +466,7 @@ static INT WSAAPI Hook_WsaStringToAddressA(
 	if (strcmp(AddressString, "192.168.92.20") == 0)
 	{
 		return gWsaStringToAddressA(
-			"127.0.0.1",
+			LOCALHOST,
 			AddressFamily,
 			lpProtocolInfo,
 			lpAddress,
@@ -862,7 +495,7 @@ static INT WSAAPI Hook_getaddrinfo(
 {
 	if (pNodeName && strcmp(pNodeName, "192.168.92.253") == 0)
 	{
-		return ggetaddrinfo("192.168.86.1", pServiceName, pHints, ppResult);
+		return ggetaddrinfo(ROUTER_IP, pServiceName, pHints, ppResult);
 	}
 
 	return ggetaddrinfo(pNodeName, pServiceName, pHints, ppResult);
@@ -1067,12 +700,6 @@ static InitFunction Wmmt6Func([]()
 	injector::WriteMemoryRaw(imageBase + 0x1401DDC, "TP", 2, true); // F:
 	injector::WriteMemoryRaw(imageBase + 0x13652B8, "TP", 2, true);
 	injector::WriteMemoryRaw(imageBase + 0x1365AC8, "TP", 2, true);
-
-	if (ToBool(config["General"]["SkipMovies"]))
-	{
-		// Skip movies fuck you wmmt5
-		safeJMP(imageBase + 0x9A79D0, ReturnTrue);
-	}
 
 	std::string value = config["General"]["CustomName"];
 	if (!value.empty())

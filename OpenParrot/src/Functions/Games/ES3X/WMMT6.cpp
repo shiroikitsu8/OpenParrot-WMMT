@@ -429,8 +429,8 @@ extern int* ffbOffset4;
 typedef INT (WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
 static WsaStringToAddressA_t gWsaStringToAddressA;
 
-#define LOCAL_IP "192.168.0.109"
-#define ROUTER_IP "192.168.0.1"
+#define LOCAL_IP "192.168.100.10"
+#define ROUTER_IP "192.168.100.1"
 #define LOCALHOST "127.0.0.1"
 
 static INT WSAAPI Hook_WsaStringToAddressA(
@@ -885,6 +885,9 @@ static InitFunction Wmmt6Func([]()
 
 	// Fix dongle error (can be triggered by various USB hubs, dongles
 	injector::MakeNOP(imageBase + 0x8C140F, 2, true);
+
+	//Fix crash when saving story mode and Time attack, if the error isn't handled then it doesnt crash?????
+	injector::WriteMemory<uint8_t>(imageBase + 0x8A6B5F, 0xEB, true);
 
 	// Save story stuff (only 05)
 	{

@@ -21,6 +21,14 @@ static bool ForceFullTune;
 static bool ForceNeon;
 static bool CarTuneNeonThread;
 static const char* ipaddr;
+
+static LPSTR terminalIP;
+static LPSTR routerIP;
+static LPSTR cab1IP;
+static LPSTR cab2IP;
+static LPSTR cab3IP;
+static LPSTR cab4IP;
+
 static DWORD mileageValue = 0;
 static int NeonColour;
 
@@ -429,9 +437,13 @@ extern int* ffbOffset4;
 typedef INT (WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
 static WsaStringToAddressA_t gWsaStringToAddressA;
 
+
 #define LOCAL_IP "192.168.100.10"
 #define ROUTER_IP "192.168.100.1"
 #define LOCALHOST "127.0.0.1"
+
+
+
 
 static INT WSAAPI Hook_WsaStringToAddressA(
 	_In_ LPSTR AddressString,
@@ -441,6 +453,8 @@ static INT WSAAPI Hook_WsaStringToAddressA(
 	_Inout_ LPINT lpAddressLength
 )
 {
+	
+	
 	if (strcmp(AddressString, "192.168.92.254") == 0)
 	{
 		return gWsaStringToAddressA(
@@ -473,6 +487,88 @@ static INT WSAAPI Hook_WsaStringToAddressA(
 			lpAddressLength
 		);
 	}
+	
+
+
+	/*
+	if (strcmp(AddressString, "192.168.92.20") == 0)
+	{
+		return gWsaStringToAddressA(
+			terminalIP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.254") == 0)
+	{
+		return gWsaStringToAddressA(
+			routerIP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.253") == 0)
+	{
+		return gWsaStringToAddressA(
+			routerIP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+	
+	if (strcmp(AddressString, "192.168.92.11") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab1IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.12") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab2IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.13") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab3IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.14") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab4IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+	*/
+
 
 	return gWsaStringToAddressA(
 		AddressString,
@@ -495,7 +591,7 @@ static INT WSAAPI Hook_getaddrinfo(
 {
 	if (pNodeName && strcmp(pNodeName, "192.168.92.253") == 0)
 	{
-		return ggetaddrinfo(ROUTER_IP, pServiceName, pHints, ppResult);
+		return ggetaddrinfo(routerIP, pServiceName, pHints, ppResult);
 	}
 
 	return ggetaddrinfo(pNodeName, pServiceName, pHints, ppResult);
@@ -561,6 +657,44 @@ static InitFunction Wmmt6Func([]()
 	if (!networkip.empty())
 	{
 		ipaddr = networkip.c_str();
+	}
+
+	std::string TERMINAL_IP = config["General"]["TerminalIP"];
+	if (!TERMINAL_IP.empty())
+	{
+		terminalIP = (LPSTR)TERMINAL_IP.c_str();
+	}
+
+	/*
+	std::string ROUTER_IP = config["General"]["RouterIP"];
+	if (!ROUTER_IP.empty())
+	{
+		routerIP = (LPSTR)ROUTER_IP.c_str();
+	}
+	*/
+
+	std::string Cab_1_IP = config["General"]["Cab1IP"];
+	if (!Cab_1_IP.empty())
+	{
+		cab1IP = (LPSTR)Cab_1_IP.c_str();
+	}
+
+	std::string Cab_2_IP = config["General"]["Cab2IP"];
+	if (!Cab_2_IP.empty())
+	{
+		cab2IP = (LPSTR)Cab_2_IP.c_str();
+	}
+
+	std::string Cab_3_IP = config["General"]["Cab3IP"];
+	if (!Cab_3_IP.empty())
+	{
+		cab3IP = (LPSTR)Cab_3_IP.c_str();
+	}
+
+	std::string Cab_4_IP = config["General"]["Cab4IP"];
+	if (!Cab_4_IP.empty())
+	{
+		cab1IP = (LPSTR)Cab_4_IP.c_str();
 	}
 
 	hookPort = "COM3";

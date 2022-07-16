@@ -439,6 +439,76 @@ static __int64 __fastcall nbamUsbFinderGetSerialNumber(int a1, char* a2)
 	}
 }
 
+static HWND mt6Hwnd;
+
+typedef BOOL(WINAPI* ShowWindow_t)(HWND, int);
+static ShowWindow_t pShowWindow;
+
+
+// Hello Win32 my old friend...
+typedef LRESULT(WINAPI* WindowProcedure_t)(HWND, UINT, WPARAM, LPARAM);
+static WindowProcedure_t pMaxituneWndProc;
+
+static BOOL gotWindowSize = FALSE;
+static unsigned displaySizeX = 0;
+static unsigned displaySizeY = 0;
+static float scaleFactorX = 0.0f;
+static float scaleFactorY = 0.0f;
+
+static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	if (!gotWindowSize)
+	{
+		displaySizeX = GetSystemMetrics(SM_CXSCREEN);
+		displaySizeY = GetSystemMetrics(SM_CYSCREEN);
+		scaleFactorX = static_cast<float>(displaySizeX) / 1360.0f;
+		scaleFactorY = static_cast<float>(displaySizeY) / 768.0f;
+		printf("display is %dx%d (scale factor of %f, %f)\n", displaySizeX, displaySizeY, scaleFactorX, scaleFactorY);
+		gotWindowSize = TRUE;
+	}
+
+	if (msg == WM_LBUTTONDOWN ||
+		msg == WM_LBUTTONUP)
+	{
+		unsigned short mx = GET_X_LPARAM(lParam);
+		unsigned short my = GET_Y_LPARAM(lParam);
+
+		//unsigned short trueMy = 768 - my;
+
+		float scaledMx = static_cast<float>(mx) / 1360.f;
+		float scaledMy = static_cast<float>(my) / 768.f;
+
+		scaledMy = 1.0f - scaledMy;
+
+		scaledMx *= scaleFactorX;
+		scaledMy *= scaleFactorY;
+
+		unsigned short trueMx = static_cast<int>(scaledMx * 16383.0f);
+		unsigned short trueMy = static_cast<int>(scaledMy * 16383.0f);
+		trueMy += 9500; // Cheap hack, todo do the math better!!
+
+		//mx *= (16383 / 1360);
+		//trueMy *= (16383 / 1360);
+
+		printf("%d %d\n", trueMx, trueMy);
+		mt6SetTouchParams(trueMx, trueMy, msg == WM_LBUTTONDOWN);
+
+		printf("MOUSE %s (%d, %d)\n", msg == WM_LBUTTONDOWN ? "DOWN" : "UP  ", mx, my);
+		return 0;
+	}
+
+	return pMaxituneWndProc(hwnd, msg, wParam, lParam);
+}
+
+static BOOL Hook_ShowWindow(HWND hwnd, int nCmdShow)
+{
+	SetWindowLongPtrW(hwnd, -4, (LONG_PTR)Hook_WndProc);
+	ShowCursor(1);
+
+	mt6Hwnd = hwnd;
+	return pShowWindow(hwnd, nCmdShow);
+}
+
 typedef INT(WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
 static WsaStringToAddressA_t gWsaStringToAddressA;
 
@@ -686,6 +756,15 @@ static InitFunction Wmmt6RFunc([]()
 		// Network hooks
 		MH_CreateHookApi(L"Ws2_32", "WSAStringToAddressA", Hook_WsaStringToAddressA, reinterpret_cast<LPVOID*>(&gWsaStringToAddressA));
 		MH_CreateHookApi(L"Ws2_32", "getaddrinfo", Hook_getaddrinfo, reinterpret_cast<LPVOID*>(&ggetaddrinfo));
+
+		// Give me the HWND please maxitune
+		MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
+		//MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
+
+		// Hook the window procedure
+		// (The image starts at 0x140000000)
+		//MH_CreateHook((void*)(imageBase + 0xB7C030), Hook_WndProc, (void**)&pMaxituneWndProc);
+		pMaxituneWndProc = (WindowProcedure_t)(imageBase + 0xC69BB0);
 
 		GenerateDongleData(isTerminal);
 

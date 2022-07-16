@@ -704,7 +704,10 @@ static InitFunction Wmmt6RFunc([]()
 
 		if (isTerminal)
 		{
-		safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+		//safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+			injector::MakeNOP((imageBase + 0x710445), 5);
+			safeJMP(hook::get_pattern("8B 01 0F B6 40 78 C3 CC CC CC CC"), ReturnTrue);
+
 
 		}
 		else

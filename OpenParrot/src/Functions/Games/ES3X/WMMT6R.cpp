@@ -4,6 +4,9 @@
 #include "MinHook.h"
 #include <Utility/Hooking.Patterns.h>
 #include <thread>
+#include <iostream>
+#include <Windowsx.h>
+#include <Utility/TouchSerial/MT6.h>
 #ifdef _M_AMD64
 #pragma optimize("", off)
 #pragma comment(lib, "Ws2_32.lib")
@@ -15,6 +18,13 @@ static bool isFreePlay;
 static bool isEventMode2P;
 static bool isEventMode4P;
 static const char* ipaddr;
+
+static LPSTR terminalIP;
+static LPSTR routerIP;
+static LPSTR cab1IP;
+static LPSTR cab2IP;
+static LPSTR cab3IP;
+static LPSTR cab4IP;
 
 // Data for IC card, Force Feedback etc OFF.
 static unsigned char settingData[405] = {
@@ -264,9 +274,13 @@ static unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen
 	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
 	bindAddr.sin_port = htons(50765);
 	if (addr == (sockaddr*)&bindAddr) {
+		// terminal proxy
+		// redirect this to localhost
+
+		auto localhost = inet_addr(terminalIP);
 		sockaddr_in bindAddr2 = { 0 };
 		bindAddr2.sin_family = AF_INET;
-		bindAddr2.sin_addr.s_addr = inet_addr(ipaddr);
+		bindAddr2.sin_addr.s_addr = localhost;
 		bindAddr2.sin_port = htons(50765);
 		return pbind(s, (sockaddr*)&bindAddr2, namelen);
 	}
@@ -292,91 +306,11 @@ static bool customCar = false;
 
 static uintptr_t SaveLocation = 0x2022A68;
 
-static int SaveGameData()
-{
-	if (!saveOk)
-		return 1;
 
-	memset(saveData, 0, 0x2000);
-	uintptr_t value = *(uintptr_t*)(imageBase + SaveLocation);
-	value = *(uintptr_t*)(value + 0x108);
-	memcpy(saveData, (void*)value, 0x340);
-	FILE* file = fopen("openprogress.sav", "wb");
-	fwrite(saveData, 1, 0x2000, file);
-	fclose(file);
-
-	// Car Profile saving
-	memset(carData, 0, 0xFF);
-	memset(carFileName, 0, 0xFF);
-	memcpy(carData, (void*)*(uintptr_t*)(*(uintptr_t*)(imageBase + SaveLocation) + 0x180 + 0xa8 + 0x18), 0xE0);
-	CreateDirectoryA("OpenParrot_Cars", nullptr);
-	if (customCar)
-	{
-		sprintf(carFileName, ".\\OpenParrot_Cars\\custom.car");
-	}
-	else
-	{
-		sprintf(carFileName, ".\\OpenParrot_Cars\\%08X.car", *(DWORD*)(*(uintptr_t*)(*(uintptr_t*)(imageBase + SaveLocation) + 0x180 + 0xa8 + 0x18) + 0x2C));
-	}
-	FILE* carSave = fopen(carFileName, "wb");
-	fwrite(carData, 1, 0xE0, file);
-	fclose(carSave);
-	saveOk = false;
-	return 1;
-}
 
 static uintptr_t saveGameOffset;
 
-static int LoadGameData()
-{
-	saveOk = false;
-	memset(saveData, 0x0, 0x2000);
-	FILE* file = fopen("openprogress.sav", "rb");
-	if (file)
-	{
-		fseek(file, 0, SEEK_END);
-		int fsize = ftell(file);
-		if (fsize == 0x2000)
-		{
-			fseek(file, 0, SEEK_SET);
-			fread(saveData, fsize, 1, file);
-			uintptr_t value = *(uintptr_t*)(imageBase + SaveLocation);
-			value = *(uintptr_t*)(value + 0x108);
 
-			// First page
-			memcpy((void*)(value + 0x10), saveData + 0x10, 0x20);
-			memcpy((void*)(value + 0x40), saveData + 0x40, 0x08);
-			memcpy((void*)(value + 0x48 + 8), saveData + 0x48 + 8, 0x08);
-			memcpy((void*)(value + 0x48 + 24), saveData + 0x48 + 24, 0x08);
-			memcpy((void*)(value + 0x48 + 32), saveData + 0x48 + 32, 0x08);
-
-			// Second page
-			value += 0x110;
-			memcpy((void*)(value), saveData + 0x110, 0x90);
-			value -= 0x110;
-
-			// Third Page
-			value += 0x1B8;
-			memcpy((void*)(value), saveData + 0x1B8, 0x48);
-			memcpy((void*)(value + 0x48 + 8), saveData + 0x1B8 + 0x48 + 8, 0x28);
-			value -= 0x1B8;
-
-			// Fourth page
-			value += 0x240;
-			memcpy((void*)(value), saveData + 0x240, 0x68);
-			value -= 0x240;
-
-			// Fifth page
-			value += 0x2B8;
-			memcpy((void*)(value), saveData + 0x2B8, 0x88);
-			value -= 0x2B8;
-
-			loadOk = true;
-		}
-		fclose(file);
-	}
-	return 1;
-}
 
 static BOOL FileExists(char* szPath)
 {
@@ -386,96 +320,6 @@ static BOOL FileExists(char* szPath)
 		!(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-static void LoadWmmt5CarData()
-{
-	if (!loadOk)
-		return;
-	customCar = false;
-	memset(carData, 0, 0xFF);
-	memset(carFileName, 0, 0xFF);
-	CreateDirectoryA("OpenParrot_Cars", nullptr);
-
-	// check for custom car
-	sprintf(carFileName, ".\\OpenParrot_Cars\\custom.car");
-	if (FileExists(carFileName))
-	{
-		FILE* file = fopen(carFileName, "rb");
-		if (file)
-		{
-			fseek(file, 0, SEEK_END);
-			int fsize = ftell(file);
-			if (fsize == 0xE0)
-			{
-				fseek(file, 0, SEEK_SET);
-				fread(carData, fsize, 1, file);
-				uintptr_t carSaveLocation = *(uintptr_t*)((*(uintptr_t*)(imageBase + SaveLocation)) + 0x180 + 0xa8 + 0x18);
-				memcpy((void*)(carSaveLocation + 0x08), carData + 0x08, 8);
-				memcpy((void*)(carSaveLocation + 0x10), carData + 0x10, 8);
-				memcpy((void*)(carSaveLocation + 0x20), carData + 0x20, 8);
-				memcpy((void*)(carSaveLocation + 0x28), carData + 0x28, 8);
-				memcpy((void*)(carSaveLocation + 0x30), carData + 0x30, 8);
-				memcpy((void*)(carSaveLocation + 0x38), carData + 0x38, 8);
-				memcpy((void*)(carSaveLocation + 0x40), carData + 0x40, 8);
-				memcpy((void*)(carSaveLocation + 0x50), carData + 0x50, 8);
-				memcpy((void*)(carSaveLocation + 0x58), carData + 0x58, 8);
-				memcpy((void*)(carSaveLocation + 0x68), carData + 0x68, 8);
-				memcpy((void*)(carSaveLocation + 0x80), carData + 0x80, 8);
-				memcpy((void*)(carSaveLocation + 0x88), carData + 0x88, 8);
-				memcpy((void*)(carSaveLocation + 0x90), carData + 0x90, 8);
-				memcpy((void*)(carSaveLocation + 0x98), carData + 0x98, 8);
-				memcpy((void*)(carSaveLocation + 0xA0), carData + 0xA0, 8);
-				memcpy((void*)(carSaveLocation + 0xA8), carData + 0xA8, 8);
-				memcpy((void*)(carSaveLocation + 0xB8), carData + 0xB8, 8);
-				memcpy((void*)(carSaveLocation + 0xC8), carData + 0xC8, 8);
-				memcpy((void*)(carSaveLocation + 0xD8), carData + 0xD8, 8);
-				customCar = true;
-			}
-			loadOk = false;
-			fclose(file);
-			return;
-		}
-	}
-
-	memset(carFileName, 0, 0xFF);
-	// Load actual car if available
-	sprintf(carFileName, ".\\OpenParrot_Cars\\%08X.car", *(DWORD*)(*(uintptr_t*)(*(uintptr_t*)(imageBase + SaveLocation) + 0x180 + 0xa8 + 0x18) + 0x2C));
-	if (FileExists(carFileName))
-	{
-		FILE* file = fopen(carFileName, "rb");
-		if (file)
-		{
-			fseek(file, 0, SEEK_END);
-			int fsize = ftell(file);
-			if (fsize == 0xE0)
-			{
-				fseek(file, 0, SEEK_SET);
-				fread(carData, fsize, 1, file);
-				uintptr_t carSaveLocation = *(uintptr_t*)((*(uintptr_t*)(imageBase + SaveLocation)) + 0x180 + 0xa8 + 0x18);
-				memcpy((void*)(carSaveLocation + 0x08), carData + 0x08, 8);
-				memcpy((void*)(carSaveLocation + 0x10), carData + 0x10, 8);
-				memcpy((void*)(carSaveLocation + 0x20), carData + 0x20, 8);
-				memcpy((void*)(carSaveLocation + 0x28), carData + 0x28, 8);
-				memcpy((void*)(carSaveLocation + 0x30), carData + 0x30, 8);
-				memcpy((void*)(carSaveLocation + 0x38), carData + 0x38, 8);
-				memcpy((void*)(carSaveLocation + 0x40), carData + 0x40, 8);
-				memcpy((void*)(carSaveLocation + 0x50), carData + 0x50, 8);
-				memcpy((void*)(carSaveLocation + 0x58), carData + 0x58, 8);
-				memcpy((void*)(carSaveLocation + 0x68), carData + 0x68, 8);
-				memcpy((void*)(carSaveLocation + 0x80), carData + 0x80, 8);
-				memcpy((void*)(carSaveLocation + 0x88), carData + 0x88, 8);
-				memcpy((void*)(carSaveLocation + 0x90), carData + 0x90, 8);
-				memcpy((void*)(carSaveLocation + 0x98), carData + 0x98, 8);
-				memcpy((void*)(carSaveLocation + 0xA0), carData + 0xA0, 8);
-				memcpy((void*)(carSaveLocation + 0xA8), carData + 0xA8, 8);
-				memcpy((void*)(carSaveLocation + 0xB8), carData + 0xB8, 8);
-				memcpy((void*)(carSaveLocation + 0xC8), carData + 0xC8, 8);
-				memcpy((void*)(carSaveLocation + 0xD8), carData + 0xD8, 8);
-			}
-			fclose(file);
-		}
-	}
-	loadOk = false;
-}
 
 static int ReturnTrue()
 {
@@ -513,7 +357,7 @@ static void GenerateDongleData(bool isTerminal)
 	hasp_buffer[0x2F] = 0x87;
 	if (isTerminal)
 	{
-		memcpy(hasp_buffer + 0xD00, "290811990002", 12); // not sure these are OK, since its from google lol.
+		memcpy(hasp_buffer + 0xD00, "280811401138", 12); // not sure these are OK, since its from google lol.
 		hasp_buffer[0xD3E] = GenerateChecksum(hasp_buffer, 0xD00, 62);
 		hasp_buffer[0xD3F] = hasp_buffer[0xD3E] ^ 0xFF;
 	}
@@ -527,15 +371,7 @@ static void GenerateDongleData(bool isTerminal)
 
 static char customName[256];
 
-static DWORD WINAPI SpamCustomName(LPVOID)
-{
-	while (true)
-	{
-		Sleep(50);
-		void* value = (void*)(imageBase + 0x2024940);
-		memcpy(value, customName, strlen(customName) + 1);
-	}
-}
+
 
 static DWORD WINAPI SpamMulticast(LPVOID)
 {
@@ -565,66 +401,11 @@ static DWORD WINAPI SpamMulticast(LPVOID)
 
 	setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
 
-	const uint8_t* byteSequences_Free[] = {
-		terminalPackage1_Free,
-		terminalPackage2_Free,
-		terminalPackage3_Free,
-		terminalPackage4_Free,
-		terminalPackage5_Free,
-		terminalPackage6_Free,
-	};
-
-	const size_t byteSizes_Free[] = {
-		sizeof(terminalPackage1_Free),
-		sizeof(terminalPackage2_Free),
-		sizeof(terminalPackage3_Free),
-		sizeof(terminalPackage4_Free),
-		sizeof(terminalPackage5_Free),
-		sizeof(terminalPackage6_Free),
-	};
-
-	const uint8_t* byteSequences_Coin[] = {
-		terminalPackage1_Coin,
-		terminalPackage2_Coin,
-		terminalPackage3_Coin,
-		terminalPackage4_Coin,
-		terminalPackage5_Coin,
-		terminalPackage6_Coin,
-	};
-
-	const size_t byteSizes_Coin[] = {
-		sizeof(terminalPackage1_Coin),
-		sizeof(terminalPackage2_Coin),
-		sizeof(terminalPackage3_Coin),
-		sizeof(terminalPackage4_Coin),
-		sizeof(terminalPackage5_Coin),
-		sizeof(terminalPackage6_Coin),
-	};
-
 	sockaddr_in toAddr = { 0 };
 	toAddr.sin_family = AF_INET;
 	toAddr.sin_addr.s_addr = inet_addr("225.0.0.1");
 	toAddr.sin_port = htons(50765);
 
-
-	isFreePlay = ToBool(config["General"]["FreePlay"]);
-	isEventMode2P = ToBool(config["TerminalEmuConfig"]["2P Event Mode"]);
-	isEventMode4P = ToBool(config["TerminalEmuConfig"]["4P Event Mode"]);
-
-	if (isFreePlay)
-	{
-		while (true) for (int i = 0; i < _countof(byteSequences_Free); i++)
-		{
-			sendto(sock, (const char*)byteSequences_Free[i], byteSizes_Free[i], 0, (sockaddr*)&toAddr, sizeof(toAddr));
-			Sleep(8);
-		}
-	}
-
-	while (true) for (int i = 0; i < _countof(byteSequences_Coin); i++)
-	{
-		sendto(sock, (const char*)byteSequences_Coin[i], byteSizes_Coin[i], 0, (sockaddr*)&toAddr, sizeof(toAddr));
-		Sleep(8);
-	}
 }
 
 extern int* ffbOffset;
@@ -644,10 +425,138 @@ static __int64 nbamUsbFinderInitialize()
 
 static __int64 __fastcall nbamUsbFinderGetSerialNumber(int a1, char* a2)
 {
-	static char* serial = "280813401138";
-	memcpy(a2, serial, strlen(serial));
-	return 0;
+	if (ToBool(config["General"]["TerminalMode"]))
+	{
+		static char* serial = "280811401138";
+		memcpy(a2, serial, strlen(serial));
+		return 0;
+	}
+	else
+	{
+		static char* serial = "280813401138";
+		memcpy(a2, serial, strlen(serial));
+		return 0;
+	}
 }
+
+typedef INT(WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
+static WsaStringToAddressA_t gWsaStringToAddressA;
+
+static INT WSAAPI Hook_WsaStringToAddressA(
+	_In_ LPSTR AddressString,
+	_In_ INT AddressFamily,
+	_In_opt_ LPWSAPROTOCOL_INFOA lpProtocolInfo,
+	_Out_ LPSOCKADDR lpAddress,
+	_Inout_ LPINT lpAddressLength
+)
+{
+
+
+	if (strcmp(AddressString, "192.168.92.254") == 0)
+	{
+		return gWsaStringToAddressA(
+			routerIP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.253") == 0)
+	{
+		return gWsaStringToAddressA(
+			routerIP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.11") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab1IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.12") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab2IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.13") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab3IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.14") == 0)
+	{
+		return gWsaStringToAddressA(
+			cab4IP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	if (strcmp(AddressString, "192.168.92.20") == 0)
+	{
+		return gWsaStringToAddressA(
+			terminalIP,
+			AddressFamily,
+			lpProtocolInfo,
+			lpAddress,
+			lpAddressLength
+		);
+	}
+
+	return gWsaStringToAddressA(
+		AddressString,
+		AddressFamily,
+		lpProtocolInfo,
+		lpAddress,
+		lpAddressLength
+	);
+}
+
+typedef INT(WSAAPI* getaddrinfo_t)(PCSTR, PCSTR, const ADDRINFOA*, PADDRINFOA*);
+static getaddrinfo_t ggetaddrinfo;
+
+static INT WSAAPI Hook_getaddrinfo(
+	_In_opt_ PCSTR pNodeName,
+	_In_opt_ PCSTR pServiceName,
+	_In_opt_ const ADDRINFOA* pHints,
+	_Out_ PADDRINFOA* ppResult
+)
+{
+	if (pNodeName && strcmp(pNodeName, "192.168.92.253") == 0)
+	{
+		return ggetaddrinfo(routerIP, pServiceName, pHints, ppResult);
+	}
+
+	return ggetaddrinfo(pNodeName, pServiceName, pHints, ppResult);
+}
+
+
 static InitFunction Wmmt6RFunc([]()
 	{
 		// folder for path redirections
@@ -674,8 +583,85 @@ static InitFunction Wmmt6RFunc([]()
 		std::string networkip = config["General"]["NetworkAdapterIP"];
 		if (!networkip.empty())
 		{
-			//strcpy(ipaddr, networkip.c_str());
 			ipaddr = networkip.c_str();
+		}
+
+		std::string TERMINAL_IP = config["General"]["TerminalIP"];
+		if (!TERMINAL_IP.empty())
+		{
+			char* theIp = (char*)malloc(sizeof(char) * 255);
+			memset(theIp, 0, sizeof(char) * 255);
+			strcpy(theIp, TERMINAL_IP.c_str());
+			terminalIP = (LPSTR)theIp;
+		}
+		else
+		{
+			terminalIP = "127.0.0.1";
+		}
+
+		std::string ROUTER_IP = config["General"]["RouterIP"];
+		if (!ROUTER_IP.empty())
+		{
+			char* theIp = (char*)malloc(sizeof(char) * 255);
+			memset(theIp, 0, sizeof(char) * 255);
+			strcpy(theIp, ROUTER_IP.c_str());
+			routerIP = (LPSTR)theIp;
+		}
+		else
+		{
+			routerIP = "192.168.86.1";
+		}
+
+		std::string Cab_1_IP = config["General"]["Cab1IP"];
+		if (!Cab_1_IP.empty())
+		{
+			char* theIp = (char*)malloc(sizeof(char) * 255);
+			memset(theIp, 0, sizeof(char) * 255);
+			strcpy(theIp, Cab_1_IP.c_str());
+			cab1IP = (LPSTR)theIp;
+		}
+		else
+		{
+			cab1IP = "192.168.255.255";
+		}
+
+		std::string Cab_2_IP = config["General"]["Cab2IP"];
+		if (!Cab_2_IP.empty())
+		{
+			char* theIp = (char*)malloc(sizeof(char) * 255);
+			memset(theIp, 0, sizeof(char) * 255);
+			strcpy(theIp, Cab_2_IP.c_str());
+			cab2IP = (LPSTR)theIp;
+		}
+		else
+		{
+			cab2IP = "192.168.255.255";
+		}
+
+		std::string Cab_3_IP = config["General"]["Cab3IP"];
+		if (!Cab_3_IP.empty())
+		{
+			char* theIp = (char*)malloc(sizeof(char) * 255);
+			memset(theIp, 0, sizeof(char) * 255);
+			strcpy(theIp, Cab_3_IP.c_str());
+			cab3IP = (LPSTR)theIp;
+		}
+		else
+		{
+			cab3IP = "192.168.255.255";
+		}
+
+		std::string Cab_4_IP = config["General"]["Cab4IP"];
+		if (!Cab_4_IP.empty())
+		{
+			char* theIp = (char*)malloc(sizeof(char) * 255);
+			memset(theIp, 0, sizeof(char) * 255);
+			strcpy(theIp, Cab_4_IP.c_str());
+			cab4IP = (LPSTR)theIp;
+		}
+		else
+		{
+			cab4IP = "192.168.255.255";
 		}
 
 		hookPort = "COM3";
@@ -696,6 +682,11 @@ static InitFunction Wmmt6RFunc([]()
 
 		MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
 
+
+		// Network hooks
+		MH_CreateHookApi(L"Ws2_32", "WSAStringToAddressA", Hook_WsaStringToAddressA, reinterpret_cast<LPVOID*>(&gWsaStringToAddressA));
+		MH_CreateHookApi(L"Ws2_32", "getaddrinfo", Hook_getaddrinfo, reinterpret_cast<LPVOID*>(&ggetaddrinfo));
+
 		GenerateDongleData(isTerminal);
 
 		injector::WriteMemory<uint8_t>(imageBase + 0x716BC6, 0, true); 	// pls check
@@ -706,33 +697,21 @@ static InitFunction Wmmt6RFunc([]()
 			injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
 		}
 
-		injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
-
-		auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
-		injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
+		//injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
 
 		// First auth error skip
 		injector::WriteMemory<BYTE>(imageBase + 0x71839B, 0xEB, true);
 
 		if (isTerminal)
 		{
-			safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+		safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+
 		}
 		else
 		{
-			injector::WriteMemory<WORD>(imageBase + 0x718FA1, 0x00D2, true); // pls check
-			injector::WriteMemory<BYTE>(imageBase + 0x20EC3A, 0x90, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x20EC3B, 0x90, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x20EC4B, 0x90, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x20EC4C, 0x90, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x20EC51, 0x90, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x20EC52, 0x90, true);
-
+			//injector::WriteMemory<WORD>(imageBase + 0x718FA1, 0x00D2, true); // terminal skip (whyyyyyyyyyyyyyyyy)
 			// spam thread
-			if (ToBool(config["General"]["TerminalEmulator"]))
-			{
-				CreateThread(0, 0, SpamMulticast, 0, 0, 0);
-			}
+			injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2); //this should be the terminal on same machine patch
 		}
 
 		// Enable all print
@@ -800,158 +779,13 @@ static InitFunction Wmmt6RFunc([]()
 		if (ToBool(config["General"]["SkipMovies"]))
 		{
 			// Skip movies fuck you wmmt5
-			safeJMP(imageBase + 0xA7D400, ReturnTrue);
+			//safeJMP(imageBase + 0xA7D400, ReturnTrue);
 		}
 
 		std::string value = config["General"]["CustomName"];
 		if (!value.empty())
 		{
-			if (value.size() > 5)
-			{
-				memset(customName, 0, 256);
-				strcpy(customName, value.c_str());
-				CreateThread(0, 0, SpamCustomName, 0, 0, 0);
-			}
 
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB30, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E0, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF20, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E0, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C530, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C18, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C28, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C38, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB32, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E2, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF22, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E2, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C532, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C1A, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C2A, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C3A, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB34, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E4, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF24, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E4, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C534, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C1C, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C2C, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C3C, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB36, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E6, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF26, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E6, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C536, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C1E, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C2E, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C3E, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB38, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E8, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF28, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E8, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C538, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C20, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C30, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C40, 0xFF, true);
-
-			char NameChar;
-			for (int i = 0; i < value.size(); i++) {
-				NameChar = value.at(i) - 0x20;
-
-				switch (i)
-				{
-				case 0x00:
-					injector::WriteMemory<BYTE>(imageBase + 0x11CEB30, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x123E0E0, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x13FEF20, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x14027E0, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x141C530, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C18, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C28, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C38, NameChar, true);
-					break;
-				case 0x01:
-					injector::WriteMemory<BYTE>(imageBase + 0x11CEB32, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x123E0E2, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x13FEF22, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x14027E2, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x141C532, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C1A, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C2A, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C3A, NameChar, true);
-					break;
-				case 0x02:
-					injector::WriteMemory<BYTE>(imageBase + 0x11CEB34, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x123E0E4, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x13FEF24, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x14027E4, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x141C534, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C1C, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C2C, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C3C, NameChar, true);
-					break;
-				case 0x03:
-					injector::WriteMemory<BYTE>(imageBase + 0x11CEB36, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x123E0E6, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x13FEF26, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x14027E6, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x141C536, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C1E, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C2E, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C3E, NameChar, true);
-					break;
-				case 0x04:
-					injector::WriteMemory<BYTE>(imageBase + 0x11CEB38, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x123E0E8, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x13FEF28, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x14027E8, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x141C538, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C20, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C30, NameChar, true);
-					injector::WriteMemory<BYTE>(imageBase + 0x1531C40, NameChar, true);
-					break;
-				}
-			}
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB31, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E1, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF21, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E1, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C531, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C19, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C29, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C39, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB33, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E3, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF23, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E3, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C533, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C1B, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C2B, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C3B, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB35, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E5, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF25, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E5, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C535, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C1D, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C2D, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C3D, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB37, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E7, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF27, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E7, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C537, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C1F, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C2F, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C3F, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x11CEB39, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x123E0E9, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x13FEF29, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x14027E9, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x141C539, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C21, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C31, 0xFF, true);
-			injector::WriteMemory<BYTE>(imageBase + 0x1531C41, 0xFF, true);
 		}
 
 		// Fix dongle error (can be triggered by various USB hubs, dongles
@@ -960,10 +794,10 @@ static InitFunction Wmmt6RFunc([]()
 		// Save story stuff (only 05)
 		{
 			// skip erasing of temp card data
-			injector::WriteMemory<uint8_t>(imageBase + 0xB2CF33, 0xEB, true);
+			//injector::WriteMemory<uint8_t>(imageBase + 0xB2CF33, 0xEB, true);
 			// Skip erasing of temp card
 			//safeJMP(imageBase + 0x6ADBF0, LoadGameData); //Disabled temporary to stop users copying WMMT6 save to 6R until save works correctly so load has a purpose!!
-			safeJMP(imageBase + 0x6C7270, ReturnTrue);
+			//safeJMP(imageBase + 0x6C7270, ReturnTrue);
 		}
 
 		MH_EnableHook(MH_ALL_HOOKS);

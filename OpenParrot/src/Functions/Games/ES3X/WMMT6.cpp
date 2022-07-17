@@ -834,6 +834,7 @@ static InitFunction Wmmt6Func([]()
 
 	//Fix crash when saving story mode and Time attack, if the error isn't handled then it doesnt crash?????
 	injector::WriteMemory<uint8_t>(imageBase + 0x8A6B5F, 0xEB, true);
+	injector::WriteMemory<uint8_t>(imageBase + 0x8A6AE8, 0x38EB, true);
 
 	// Save story stuff (only 05)
 	{

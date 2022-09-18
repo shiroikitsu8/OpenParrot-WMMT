@@ -1,14 +1,13 @@
 #include <StdInc.h>
 #include "Utility/InitFunction.h"
 #include "Functions/Global.h"
-#include <filesystem>
-#include <iostream>
-#include <cstdint>
-#include <fstream>
 #include "MinHook.h"
 #include <Utility/Hooking.Patterns.h>
-#include <chrono>
 #include <thread>
+#include <iostream>
+#include <Windowsx.h>
+#include <Utility/TouchSerial/MT6.h>
+#include <fstream>
 #ifdef _M_AMD64
 #pragma optimize("", off)
 #pragma comment(lib, "Ws2_32.lib")
@@ -192,12 +191,143 @@ void GenerateDongleDataDxp(bool isTerminal)
 }
 
 
+static HWND mt6Hwnd;
+
+typedef BOOL(WINAPI* ShowWindow_t)(HWND, int);
+static ShowWindow_t pShowWindow;
+
+
+// Hello Win32 my old friend...
+typedef LRESULT(WINAPI* WindowProcedure_t)(HWND, UINT, WPARAM, LPARAM);
+static WindowProcedure_t pMaxituneWndProc;
+
+static BOOL gotWindowSize = FALSE;
+static unsigned displaySizeX = 0;
+static unsigned displaySizeY = 0;
+static float scaleFactorX = 0.0f;
+static float scaleFactorY = 0.0f;
+
+static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	if (!gotWindowSize)
+	{
+		displaySizeX = GetSystemMetrics(SM_CXSCREEN);
+		displaySizeY = GetSystemMetrics(SM_CYSCREEN);
+		scaleFactorX = static_cast<float>(displaySizeX) / 1360.0f;
+		scaleFactorY = static_cast<float>(displaySizeY) / 768.0f;
+		printf("display is %dx%d (scale factor of %f, %f)\n", displaySizeX, displaySizeY, scaleFactorX, scaleFactorY);
+		gotWindowSize = TRUE;
+	}
+
+	if (msg == WM_LBUTTONDOWN ||
+		msg == WM_LBUTTONUP)
+	{
+		unsigned short mx = GET_X_LPARAM(lParam);
+		unsigned short my = GET_Y_LPARAM(lParam);
+
+		//unsigned short trueMy = 768 - my;
+
+		float scaledMx = static_cast<float>(mx) / 1360.f;
+		float scaledMy = static_cast<float>(my) / 768.f;
+
+		scaledMy = 1.0f - scaledMy;
+
+		scaledMx *= scaleFactorX;
+		scaledMy *= scaleFactorY;
+
+		unsigned short trueMx = static_cast<int>(scaledMx * 16383.0f);
+		unsigned short trueMy = static_cast<int>(scaledMy * 16383.0f);
+		trueMy += 9500; // Cheap hack, todo do the math better!!
+
+		//mx *= (16383 / 1360);
+		//trueMy *= (16383 / 1360);
+
+		printf("%d %d\n", trueMx, trueMy);
+		mt6SetTouchParams(trueMx, trueMy, msg == WM_LBUTTONDOWN);
+
+		printf("MOUSE %s (%d, %d)\n", msg == WM_LBUTTONDOWN ? "DOWN" : "UP  ", mx, my);
+		return 0;
+	}
+
+	return pMaxituneWndProc(hwnd, msg, wParam, lParam);
+}
+
+static BOOL Hook_ShowWindow(HWND hwnd, int nCmdShow)
+{
+	SetWindowLongPtrW(hwnd, -4, (LONG_PTR)Hook_WndProc);
+	ShowCursor(1);
+
+	mt6Hwnd = hwnd;
+	return pShowWindow(hwnd, nCmdShow);
+}
+
+typedef void (WINAPI* OutputDebugStringA_t)(LPCSTR);
+static void Hook_OutputDebugStringA(LPCSTR str)
+{
+	printf("debug> %s", str);
+}
+
+static DWORD WINAPI SpamMulticast(LPVOID)
+{
+	WSADATA wsaData;
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
+
+	SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+	int ttl = 255;
+	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (char*)&ttl, sizeof(ttl));
+
+	int reuse = 1;
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
+
+	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (char*)&reuse, sizeof(reuse));
+
+	sockaddr_in bindAddr = { 0 };
+	bindAddr.sin_family = AF_INET;
+	bindAddr.sin_addr.s_addr = inet_addr(ipaddrdxplus);
+	bindAddr.sin_port = htons(50765);
+	bind(sock, (sockaddr*)&bindAddr, sizeof(bindAddr));
+
+
+	ip_mreq mreq;
+	mreq.imr_multiaddr.s_addr = inet_addr("225.0.0.1");
+	mreq.imr_interface.s_addr = inet_addr(ipaddrdxplus);
+
+	setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
+
+	sockaddr_in toAddr = { 0 };
+	toAddr.sin_family = AF_INET;
+	toAddr.sin_addr.s_addr = inet_addr("225.0.0.1");
+	toAddr.sin_port = htons(50765);
+	return true;
+}
+
 // Wmmt5Func([]()): InitFunction
 // Performs the initial startup tasks for 
 // maximum tune 5, including the starting 
 // of required subprocesses.
 static InitFunction Wmmt5Func([]()
 {
+	// Alloc debug console
+	FreeConsole();
+	AllocConsole();
+	SetConsoleTitle(L"Maxitune6 Console");
+
+	FILE* pNewStdout = nullptr;
+	FILE* pNewStderr = nullptr;
+	FILE* pNewStdin = nullptr;
+
+	::freopen_s(&pNewStdout, "CONOUT$", "w", stdout);
+	::freopen_s(&pNewStderr, "CONOUT$", "w", stderr);
+	::freopen_s(&pNewStdin, "CONIN$", "r", stdin);
+	std::cout.clear();
+	std::cerr.clear();
+	std::cin.clear();
+	std::wcout.clear();
+	std::wcerr.clear();
+	std::wcin.clear();
+
+	puts("hello there, maxitune");
 
 	// Records if terminal mode is enabled
 	bool isTerminal = false;
@@ -233,14 +363,21 @@ static InitFunction Wmmt5Func([]()
 	MH_CreateHookApi(L"hasp_windows_x64_106482.dll", "hasp_logout", dxpHook_hasp_logout, NULL);
 	MH_CreateHookApi(L"hasp_windows_x64_106482.dll", "hasp_login", dxpHook_hasp_login, NULL);
 
-	GenerateDongleDataDxp(isTerminal);
+	MH_CreateHookApi(L"kernel32", "OutputDebugStringA", Hook_OutputDebugStringA, NULL);
+
+	// Give me the HWND please maxitune
+	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
+	pMaxituneWndProc = (WindowProcedure_t)(imageBasedxplus + 0xB78B90);
 
 	//load banapass emu
 	auto mod = LoadLibraryA(".\\openBanaW5p.dll");
 
-
 	// Prevents game from setting time, thanks pockywitch!
 	MH_CreateHookApi(L"KERNEL32", "SetSystemTime", Hook_SetSystemTime, reinterpret_cast<LPVOID*>(&pSetSystemTime));
+
+	GenerateDongleDataDxp(isTerminal);
+
+
 
 	injector::WriteMemory<uint8_t>(hook::get_pattern("85 C9 0F 94 C0 84 C0 0F 94 C0 84 C0 75 ? 40 32 F6 EB ?", 0x15), 0, true); //patches out dongle error2 (doomer)
 	injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 76 ? 49 8D ? ? ? ? 00 00"), 6);
@@ -270,26 +407,13 @@ static InitFunction Wmmt5Func([]()
 		// If terminal emulator is enabled
 		if (ToBool(config["General"]["TerminalEmulator"]))
 		{
-
+			CreateThread(0, 0, SpamMulticast, 0, 0, 0);
 		}
 	}
-	
 	else
-	{
-		// Patch some func to 1
-		// 
-		// FOUND ON 21, 10, 1
-		// NOT FOUND:
-		//safeJMP(imageBase + 0x7BE440, ReturnTrue);
-		//safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
-		//safeJMP(imageBase + 0x89D420, ReturnTrue);
-
-		// Patch some func to 1
-		// 40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 28 48 8D ?? ?? ?? ?? 00 48 8D ?? ?? ?? ?? 00 41 B8 ?? ?? 00 00 FF 15 ?? ?? ?? ?? 4C 8B 1B 41 0F B6 43 78
-		// FOUND ON 21, 10, 1
-		//safeJMP(imageBase + 0x7CF8D0, ReturnTrue); 
-		//safeJMP(hook::get_pattern("40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 11 48 8B 0D C2"), ReturnTrue);
-		//safeJMP(imageBase + 0x8B5190, ReturnTrue); 
+	{	//terminal mode patches
+		safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+		safeJMP(hook::get_pattern("8B 01 0F B6 40 78 C3 CC CC CC CC"), ReturnTrue);
 	}
 	
 

@@ -302,6 +302,26 @@ static DWORD WINAPI SpamMulticast(LPVOID)
 	return true;
 }
 
+typedef int (WINAPI* BINDw5p)(SOCKET, CONST SOCKADDR*, INT);
+static BINDw5p pbindw5p = NULL;
+unsigned int WINAPI Hook_bind_w5p(SOCKET s, const sockaddr* addr, int namelen) {
+	sockaddr_in bindAddr = { 0 };
+	bindAddr.sin_family = AF_INET;
+	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
+	bindAddr.sin_port = htons(50765);
+	if (addr == (sockaddr*)&bindAddr) {
+		sockaddr_in bindAddr2 = { 0 };
+		bindAddr2.sin_family = AF_INET;
+		bindAddr2.sin_addr.s_addr = inet_addr(ipaddrdxplus);
+		bindAddr2.sin_port = htons(50765);
+		return pbindw5p(s, (sockaddr*)&bindAddr2, namelen);
+	}
+	else {
+		return pbindw5p(s, addr, namelen);
+
+	}
+}
+
 // Wmmt5Func([]()): InitFunction
 // Performs the initial startup tasks for 
 // maximum tune 5, including the starting 
@@ -362,6 +382,7 @@ static InitFunction Wmmt5Func([]()
 	MH_CreateHookApi(L"hasp_windows_x64_106482.dll", "hasp_encrypt", dxpHook_hasp_encrypt, NULL);
 	MH_CreateHookApi(L"hasp_windows_x64_106482.dll", "hasp_logout", dxpHook_hasp_logout, NULL);
 	MH_CreateHookApi(L"hasp_windows_x64_106482.dll", "hasp_login", dxpHook_hasp_login, NULL);
+	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind_w5p, reinterpret_cast<LPVOID*>(&pbindw5p));
 
 	MH_CreateHookApi(L"kernel32", "OutputDebugStringA", Hook_OutputDebugStringA, NULL);
 

@@ -19,6 +19,7 @@ static bool isFreePlay;
 static bool isEventMode2P;
 static bool isEventMode4P;
 const char *ipaddrdxplus;
+bool isUpdate5 = false;
 
 // MUST DISABLE IC CARD, FFB MANUALLY N MT5DX+
 
@@ -322,12 +323,19 @@ unsigned int WINAPI Hook_bind_w5p(SOCKET s, const sockaddr* addr, int namelen) {
 	}
 }
 
+
+
 // Wmmt5Func([]()): InitFunction
 // Performs the initial startup tasks for 
 // maximum tune 5, including the starting 
 // of required subprocesses.
 static InitFunction Wmmt5Func([]()
 {
+	if (ToBool(config["Update5"]["Enable Update5"]))
+	{
+		isUpdate5 = true;
+	}
+
 	// Alloc debug console
 	FreeConsole();
 	AllocConsole();
@@ -388,10 +396,15 @@ static InitFunction Wmmt5Func([]()
 
 	// Give me the HWND please maxitune
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
-	pMaxituneWndProc = (WindowProcedure_t)(imageBasedxplus + 0xB78B90);
+	pMaxituneWndProc = (WindowProcedure_t)(hook::get_pattern("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 30 8B EA BA EB FF FF FF 49 8B F9 49 8B F0 48 8B D9 FF 15 ? ? ? 00 48 85 C0 74 1D 4C", 0));
 
 	//load banapass emu
-	auto mod = LoadLibraryA(".\\openBanaW5p.dll");
+	if (!isUpdate5) {
+		LoadLibraryA(".\\openBanaW5p.dll");
+	}
+	else {
+		LoadLibraryA(".\\openBanaW5p5.dll");
+	}
 
 	// Prevents game from setting time, thanks pockywitch!
 	MH_CreateHookApi(L"KERNEL32", "SetSystemTime", Hook_SetSystemTime, reinterpret_cast<LPVOID*>(&pSetSystemTime));
@@ -423,7 +436,7 @@ static InitFunction Wmmt5Func([]()
 	// Terminal mode is off
 	if (!isTerminal)
 	{
-		injector::MakeNOP(imageBasedxplus + 0x9F2BB3, 2); //terminal on same machine patch
+		injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2); //terminal on same machine patch
 
 		// If terminal emulator is enabled
 		if (ToBool(config["General"]["TerminalEmulator"]))
@@ -461,7 +474,7 @@ static InitFunction Wmmt5Func([]()
 		}
 	}
 
-	{
+	if (!isUpdate5) {
 		// Enable all print
 		injector::MakeNOP(imageBasedxplus + 0x898BD3, 6);
 

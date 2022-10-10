@@ -272,7 +272,6 @@ static InitFunction Wmmt5Func([]()
 	else
 	{
 		{
-			injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2); //terminal on same machine patch
 			auto location = hook::get_pattern<char>("48 8B 18 48 3B D8 0F 84 88 00 00 00 39 7B 1C 74 60 80 7B 31 00 75 4F 48 8B 43 10 80 78 31 00");
 			injector::MakeNOP(location + 6, 6); // 6
 			injector::MakeNOP(location + 0xF, 2); // 0xF

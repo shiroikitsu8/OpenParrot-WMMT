@@ -18,7 +18,10 @@
 extern LPCSTR hookPort;
 uintptr_t imageBase;
 static unsigned char hasp_buffer[0xD40];
-const char *ipaddr;
+static bool isFreePlay;
+static bool isEventMode2P;
+static bool isEventMode4P;
+const char* ipaddr;
 
 // Data for IC card, Force Feedback etc OFF.
 unsigned char settingData[408] = {
@@ -58,6 +61,7 @@ unsigned char settingData[408] = {
 	0x8F, 0x3D, 0x7F, 0x00, 0x10, 0x1E, 0x34, 0xD9, 0xB5, 0x03, 0x00, 0x00
 };
 
+
 #define HASP_STATUS_OK 0
 unsigned int Hook_hasp_login(int feature_id, void* vendor_code, int hasp_handle) {
 #ifdef _DEBUG
@@ -91,7 +95,7 @@ unsigned int Hook_hasp_get_size(int hasp_handle, int hasp_fileid, unsigned int* 
 #ifdef _DEBUG
 	OutputDebugStringA("hasp_get_size\n");
 #endif
-	*hasp_size = 0xD40; // Max addressable size by the game... absmax is 4k
+	* hasp_size = 0xD40; // Max addressable size by the game... absmax is 4k
 	return HASP_STATUS_OK;
 }
 
@@ -107,10 +111,10 @@ unsigned int Hook_hasp_write(int hasp_handle, int hasp_fileid, unsigned int offs
 	return HASP_STATUS_OK;
 }
 
-typedef int (WINAPI *BIND)(SOCKET, CONST SOCKADDR *, INT);
+typedef int (WINAPI* BIND)(SOCKET, CONST SOCKADDR*, INT);
 BIND pbind = NULL;
 
-unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr *addr, int namelen) {
+unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen) {
 	sockaddr_in bindAddr = { 0 };
 	bindAddr.sin_family = AF_INET;
 	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
@@ -124,7 +128,73 @@ unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr *addr, int namelen) {
 	}
 	else {
 		return pbind(s, addr, namelen);
-		
+
+	}
+}
+
+// ******************************************** //
+// ************ Debug Data Logging ************ //
+// ******************************************** //
+
+// ************* Global Variables ************* //
+
+// **** String Variables
+
+// Debugging event log file
+std::string logfile = "wmmt5_errors.txt";
+
+// writeLog(filename: String, message: String): Int
+// Given a filename string and a message string, appends
+// the message to the given file.
+static int writeLog(std::string filename, std::string message)
+{
+	// Log file to write to
+	std::ofstream eventLog;
+
+	// Open the filename provided (append mode)
+	eventLog.open(filename, std::ios_base::app);
+
+	// File open success
+	if (eventLog.is_open())
+	{
+		// Write the message to the file
+		eventLog << message;
+
+		// Close the log file handle
+		eventLog.close();
+
+		// Success
+		return 0;
+	}
+	else // File open failed
+	{
+		// Failure
+		return 1;
+	}
+}
+
+// writeDump(filename: Char*, data: unsigned char *, size: size_t): Int
+static int writeDump(char* filename, unsigned char* data, size_t size)
+{
+	// Open the file with the provided filename
+	FILE* file = fopen(filename, "wb");
+
+	// File opened successfully
+	if (file)
+	{
+		// Write the data to the file
+		fwrite((void*)data, 1, size, file);
+
+		// Close the file
+		fclose(file);
+
+		// Return success status
+		return 0;
+	}
+	else // Failed to open
+	{
+		// Return failure status
+		return 1;
 	}
 }
 
@@ -152,7 +222,7 @@ void GenerateDongleData(bool isTerminal)
 	hasp_buffer[0x2D] = 0x6B;
 	hasp_buffer[0x2E] = 0x40;
 	hasp_buffer[0x2F] = 0x87;
-	if(isTerminal)
+	if (isTerminal)
 	{
 		memcpy(hasp_buffer + 0xD00, "272211990002", 12);
 		hasp_buffer[0xD3E] = 0x63;
@@ -166,8 +236,6 @@ void GenerateDongleData(bool isTerminal)
 	}
 }
 
-char customName[256];
-
 extern int* ffbOffset;
 extern int* ffbOffset2;
 extern int* ffbOffset3;
@@ -178,150 +246,153 @@ DWORD WINAPI Wmmt5FfbCollector(void* ctx)
 	uintptr_t imageBase = (uintptr_t)GetModuleHandleA(0);
 	while (true)
 	{
-		*ffbOffset = *(DWORD *)(imageBase + 0x196F188);
-		*ffbOffset2 = *(DWORD *)(imageBase + 0x196F18c);
-		*ffbOffset3 = *(DWORD *)(imageBase + 0x196F190);
-		*ffbOffset4 = *(DWORD *)(imageBase + 0x196F194);
+		*ffbOffset = *(DWORD*)(imageBase + 0x196F188);
+		*ffbOffset2 = *(DWORD*)(imageBase + 0x196F18c);
+		*ffbOffset3 = *(DWORD*)(imageBase + 0x196F190);
+		*ffbOffset4 = *(DWORD*)(imageBase + 0x196F194);
 		Sleep(10);
 	}
 }
 
 static InitFunction Wmmt5Func([]()
-{
-	FILE* fileF = _wfopen(L"Fsetting.lua.gz", L"r");
-	if (fileF == NULL)
 	{
-		FILE* settingsF = _wfopen(L"Fsetting.lua.gz", L"wb");
-		fwrite(settingData, 1, sizeof(settingData), settingsF);
-		fclose(settingsF);
-	}
-	else
-	{
-		fclose(fileF);
-	}
-
-	FILE* fileG = _wfopen(L"Gsetting.lua.gz", L"r");
-	if (fileG == NULL)
-	{
-		FILE* settingsG = _wfopen(L"Gsetting.lua.gz", L"wb");
-		fwrite(settingData, 1, sizeof(settingData), settingsG);
-		fclose(settingsG);
-	}
-	else
-	{
-		fclose(fileG);
-	}
-
-
-	bool isTerminal = false;
-	if (ToBool(config["General"]["TerminalMode"]))
-	{
-		isTerminal = true;
-	}
-	
-	std::string networkip = config["General"]["NetworkAdapterIP"];
-	if (!networkip.empty())
-	{
-		//strcpy(ipaddr, networkip.c_str());
-		ipaddr = networkip.c_str();
-	}
-
-	hookPort = "COM3";
-	imageBase = (uintptr_t)GetModuleHandleA(0);
-
-	MH_Initialize();
-
-	// Hook dongle funcs
-	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_write", Hook_hasp_write, NULL);
-	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_read", Hook_hasp_read, NULL);
-	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_get_size", Hook_hasp_get_size, NULL);
-	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_decrypt", Hook_hasp_decrypt, NULL);
-	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_encrypt", Hook_hasp_encrypt, NULL);
-	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_logout", Hook_hasp_logout, NULL);
-	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_login", Hook_hasp_login, NULL);
-	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
-
-	GenerateDongleData(isTerminal);
-
-
-	//Load banapass emu
-	LoadLibraryA(".\\openBanaW5p.dll");
-
-	//restore old patches
-	injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
-	injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 0F 87 B4 00 00 00", 6), 6);
-	injector::WriteMemory<uint8_t>(hook::get_pattern("83 FA 04 0F 8C 1E 01 00 00 4C 89 44 24 18 4C 89 4C 24 20", 2), 0, true);
-	injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
-	auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
-	injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
-
-	// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
-	if (ToBool(config["General"]["WhiteScreenFix"]))
-	{
-		injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
-	}
-
-	{
-		auto location = hook::get_pattern<char>("41 3B C7 74 0E 48 8D 8F B8 00 00 00 BA F6 01 00 00 EB 6E 48 8D 8F A0 00 00 00");
-		injector::WriteMemory<uint8_t>(location + 3, 0xEB, true); //patches content router
-		injector::MakeNOP(location + 0x22, 2); //patches ip addr
-		injector::MakeNOP(location + 0x33, 2); //patches ip addr
-	}
-
-
-	if (isTerminal)
-	{
-		safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
-		safeJMP(hook::get_pattern("40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 28 48 8D ? ? ? ? 00 48 8D ? ? ? ? 00 41 B8 ? ? 00 00 FF 15 ? ? ? ? 4C 8B 1B 41 0F B6 43 78"), ReturnTrue);
-	}
-	else
-	{
+		FILE* fileF = _wfopen(L"Fsetting.lua.gz", L"r");
+		if (fileF == NULL)
 		{
-			auto location = hook::get_pattern<char>("48 8B 18 48 3B D8 0F 84 88 00 00 00 39 7B 1C 74 60 80 7B 31 00 75 4F 48 8B 43 10 80 78 31 00");
-			injector::MakeNOP(location + 6, 6); // 6
-			injector::MakeNOP(location + 0xF, 2); // 0xF
-			injector::MakeNOP(location + 0x15, 2); // 0x15
+			FILE* settingsF = _wfopen(L"Fsetting.lua.gz", L"wb");
+			fwrite(settingData, 1, sizeof(settingData), settingsF);
+			fclose(settingsF);
 		}
-	}
-
-	auto chars = { 'F', 'G' };
-
-	for (auto cha : chars)
-	{
-		auto patterns = hook::pattern(va("%02X 3A 2F", cha));
-
-		if (patterns.size() > 0)
+		else
 		{
-			for (int i = 0; i < patterns.size(); i++)
+			fclose(fileF);
+		}
+
+		FILE* fileG = _wfopen(L"Gsetting.lua.gz", L"r");
+		if (fileG == NULL)
+		{
+			FILE* settingsG = _wfopen(L"Gsetting.lua.gz", L"wb");
+			fwrite(settingData, 1, sizeof(settingData), settingsG);
+			fclose(settingsG);
+		}
+		else
+		{
+			fclose(fileG);
+		}
+
+
+		bool isTerminal = false;
+		if (ToBool(config["General"]["TerminalMode"]))
+		{
+			isTerminal = true;
+		}
+
+		std::string networkip = config["General"]["NetworkAdapterIP"];
+		if (!networkip.empty())
+		{
+			//strcpy(ipaddr, networkip.c_str());
+			ipaddr = networkip.c_str();
+		}
+
+		hookPort = "COM3";
+		imageBase = (uintptr_t)GetModuleHandleA(0);
+
+		MH_Initialize();
+
+		// Hook dongle funcs
+		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_write", Hook_hasp_write, NULL);
+		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_read", Hook_hasp_read, NULL);
+		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_get_size", Hook_hasp_get_size, NULL);
+		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_decrypt", Hook_hasp_decrypt, NULL);
+		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_encrypt", Hook_hasp_encrypt, NULL);
+		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_logout", Hook_hasp_logout, NULL);
+		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_login", Hook_hasp_login, NULL);
+		MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
+
+		GenerateDongleData(isTerminal);
+
+		//load banapass emu
+		LoadLibraryA(".\\openBanaW5p.dll");
+
+		
+		injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
+
+		injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 0F 87 B4 00 00 00", 6), 6);
+
+		// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
+		if (ToBool(config["General"]["WhiteScreenFix"]))
+		{
+			injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
+		}
+
+		{
+			auto location = hook::get_pattern<char>("41 3B C7 74 0E 48 8D 8F B8 00 00 00 BA F6 01 00 00 EB 6E 48 8D 8F A0 00 00 00");
+			
+			injector::WriteMemory<uint8_t>(location + 3, 0xEB, true);
+
+			injector::MakeNOP(location + 0x22, 2);
+
+			injector::MakeNOP(location + 0x33, 2);
+		}
+
+		{
+			auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
+			injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
+		}
+
+		if (isTerminal)
+		{
+			safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+
+			safeJMP(hook::get_pattern("40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 28 48 8D ? ? ? ? 00 48 8D ? ? ? ? 00 41 B8 ? ? 00 00 FF 15 ? ? ? ? 4C 8B 1B 41 0F B6 43 78"), ReturnTrue);
+		}
+		else
+		{
 			{
-				char* text = patterns.get(i).get<char>(0);
-				std::string text_str(text);
-
-				std::string to_replace = va("%c:/", cha);
-				std::string replace_with = va("./%c", cha);
-
-				std::string replaced = text_str.replace(0, to_replace.length(), replace_with);
-
-				injector::WriteMemoryRaw(text, (char*)replaced.c_str(), replaced.length() + 1, true);
+				auto location = hook::get_pattern<char>("48 8B 18 48 3B D8 0F 84 88 00 00 00 39 7B 1C 74 60 80 7B 31 00 75 4F 48 8B 43 10 80 78 31 00");
+				injector::MakeNOP(location + 6, 6); // 6
+				injector::MakeNOP(location + 0xF, 2); // 0xF
+				injector::MakeNOP(location + 0x15, 2); // 0x15
 			}
 		}
-	}
 
-	if (ToBool(config["General"]["SkipMovies"]))
-	{
-		// Skip movies fuck you wmmt5 (what the fuck is this for?)
-		safeJMP(imageBase + 0x806020, ReturnTrue);
-	}
+		auto chars = { 'F', 'G' };
 
-	// Save story stuff (only 05)
-	{
+		for (auto cha : chars)
+		{
+			auto patterns = hook::pattern(va("%02X 3A 2F", cha));
 
+			if (patterns.size() > 0)
+			{
+				for (int i = 0; i < patterns.size(); i++)
+				{
+					char* text = patterns.get(i).get<char>(0);
+					std::string text_str(text);
 
-		CreateThread(0, 0, Wmmt5FfbCollector, 0, 0, 0);
-	}
+					std::string to_replace = va("%c:/", cha);
+					std::string replace_with = va("./%c", cha);
 
-	MH_EnableHook(MH_ALL_HOOKS);
+					std::string replaced = text_str.replace(0, to_replace.length(), replace_with);
 
-}, GameID::WMMT5);
+					injector::WriteMemoryRaw(text, (char*)replaced.c_str(), replaced.length() + 1, true);
+				}
+			}
+		}
+
+		if (ToBool(config["General"]["SkipMovies"]))
+		{
+			// Skip movies fuck you wmmt5
+			safeJMP(imageBase + 0x806020, ReturnTrue);
+		}
+
+		// Save story stuff (only 05)
+		{
+
+			CreateThread(0, 0, Wmmt5FfbCollector, 0, 0, 0);
+		}
+
+		MH_EnableHook(MH_ALL_HOOKS);
+
+	}, GameID::WMMT5);
 #endif
 #pragma optimize("", on)

@@ -243,95 +243,36 @@ static InitFunction Wmmt5Func([]()
 
 	GenerateDongleData(isTerminal);
 
-	// Patch some check
-	// 0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 E4 EB 03 41 B4 01
-	// FOUND ON 21, 10
-	// NOT WORKING 1
-	// 0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ?? EB
-	// FOUND ON 1
-	//injector::WriteMemory<uint8_t>(imageBase + 0x6286EC, 0, true); 
-	injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
 
-	// Patch some jnz
-	// 83 C0 FD 83 F8 01 0F 87 B4 00 00 00 83 BF D0 06 00 00 3C 73 29 48 8D 8D 60 06 00 00
-	// FOUND ON 21, 10
-	// NOT FOUND: 1
-	// 83 C0 FD 83 F8 01 0F 87 B4 00 00 00
-	// FOUND ON 1
-	//injector::MakeNOP(imageBase + 0x628AE0, 6);
-	injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 0F 87 B4 00 00 00", 6), 6);
+	//Load banapass emu
+	LoadLibraryA(".\\openBanaW5p.dll");
 
-	// Patch some shit
-	// 83 FA 04 0F 8C 1E 01 00 00 4C 89 44 24 18 4C 89 4C 24 20
-	// FOUND ON 21, 10, 1
-	// NOT FOUND:
-	//injector::WriteMemory<uint8_t>(imageBase + 0x7B9882, 0, true);
-	injector::WriteMemory<uint8_t>(hook::get_pattern("83 FA 04 0F 8C 1E 01 00 00 4C 89 44 24 18 4C 89 4C 24 20", 2), 0, true);
-		
+	injector::WriteMemory<uint8_t>(hook::get_pattern("85 C9 0F 94 C0 84 C0 0F 94 C0 84 C0 75 ? 40 32 F6 EB ?", 0x15), 0, true); //patches out dongle error2
+	injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 76 ? 49 8D ? ? ? ? 00 00"), 6);
+
 	// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
 	if (ToBool(config["General"]["WhiteScreenFix"]))
 	{
 		injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
 	}
 
-	// Patch some call
-	// 45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ?? ?? ?? ?? 48 8B 08
-	// FOUND ON 21, 10, 1
-	//injector::MakeNOP(imageBase + 0x7DADED, 5);
-	injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
-
 	{
-		// 199AE18 TIME OFFSET RVA
-
 		auto location = hook::get_pattern<char>("41 3B C7 74 0E 48 8D 8F B8 00 00 00 BA F6 01 00 00 EB 6E 48 8D 8F A0 00 00 00");
-		// Patch some jnz
-		// 41 3B C7 74 0E 48 8D 8F B8 00 00 00 BA F6 01 00 00 EB 6E 48 8D 8F A0 00 00 00
-		// FOUND ON 21, 10, 1
-		//injector::WriteMemory<uint8_t>(imageBase + 0x943F52, 0xEB, true);
-		injector::WriteMemory<uint8_t>(location + 3, 0xEB, true);
-
-		// Skip some jnz
-		//injector::MakeNOP(imageBase + 0x943F71, 2);
-		injector::MakeNOP(location + 0x22, 2);
-
-		// Skip some jnz
-		//injector::MakeNOP(imageBase + 0x943F82, 2);
-		injector::MakeNOP(location + 0x33, 2);
+		injector::WriteMemory<uint8_t>(location + 3, 0xEB, true); //patches content router
+		injector::MakeNOP(location + 0x22, 2); //patches ip addr
+		injector::MakeNOP(location + 0x33, 2); //patches ip addr
 	}
 
-	// Skip DebugBreak on MFStartup fail
-	// 48 83 EC 28 33 D2 B9 70 00 02 00 E8 ?? ?? ?? ?? 85 C0 79 06
-	// FOUND on 21, 1
-	{
-		auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
-		injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
-	}
-	//safeJMP(hook::get_pattern(V("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06")), ReturnTrue);
 
 	if (isTerminal)
 	{
-		// Patch some func to 1
-		// 
-		// FOUND ON 21, 10, 1
-		// NOT FOUND:
-		//safeJMP(imageBase + 0x7BE440, ReturnTrue);
 		safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
-
-		// Patch some func to 1
-		// 40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 28 48 8D ?? ?? ?? ?? 00 48 8D ?? ?? ?? ?? 00 41 B8 ?? ?? 00 00 FF 15 ?? ?? ?? ?? 4C 8B 1B 41 0F B6 43 78
-		// FOUND ON 21, 10, 1
-		//safeJMP(imageBase + 0x7CF8D0, ReturnTrue);
 		safeJMP(hook::get_pattern("40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 28 48 8D ? ? ? ? 00 48 8D ? ? ? ? 00 41 B8 ? ? 00 00 FF 15 ? ? ? ? 4C 8B 1B 41 0F B6 43 78"), ReturnTrue);
 	}
 	else
 	{
-		// Disregard terminal scanner stuff.
-		// 48 8B 18 48 3B D8 0F 84 88 00 00 00 39 7B 1C 74 60 80 7B 31 00 75 4F 48 8B 43 10 80 78 31 00
-		// FOUND ON 21, 10, 1
-		//injector::MakeNOP(imageBase + 0x91E1AE, 6);
-		//injector::MakeNOP(imageBase + 0x91E1B7, 2);
-		//injector::MakeNOP(imageBase + 0x91E1BD, 2);
 		{
+			injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2); //terminal on same machine patch
 			auto location = hook::get_pattern<char>("48 8B 18 48 3B D8 0F 84 88 00 00 00 39 7B 1C 74 60 80 7B 31 00 75 4F 48 8B 43 10 80 78 31 00");
 			injector::MakeNOP(location + 6, 6); // 6
 			injector::MakeNOP(location + 0xF, 2); // 0xF

@@ -387,7 +387,8 @@ static InitFunction Wmmt5Func([]()
 
 		// Save story stuff (only 05)
 		{
-
+			// Fix F and G drive crash on mileage screen
+			injector::MakeNOP(imageBase + 0xCE5DF, 5);
 			CreateThread(0, 0, Wmmt5FfbCollector, 0, 0, 0);
 		}
 

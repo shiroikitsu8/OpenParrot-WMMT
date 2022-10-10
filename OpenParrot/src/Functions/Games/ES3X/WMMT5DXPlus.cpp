@@ -481,6 +481,12 @@ static InitFunction Wmmt5Func([]()
 		//Fix crash when saving story mode and Time attack
 		injector::MakeNOP(imageBasedxplus + 0xE90C7, 5);
 	}
+	else {
+		// Enable all print
+		injector::MakeNOP(imageBasedxplus + 0x8F15A3, 6);
+		//Fix crash when saving story mode and Time attack
+		injector::MakeNOP(imageBasedxplus + 0xE8DE7, 5);
+	}
 
 	MH_EnableHook(MH_ALL_HOOKS);
 

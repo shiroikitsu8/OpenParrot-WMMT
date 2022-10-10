@@ -22,13 +22,6 @@ static bool ForceNeon;
 static bool CarTuneNeonThread;
 static const char* ipaddr;
 
-static LPSTR terminalIP;
-static LPSTR routerIP;
-static LPSTR cab1IP;
-static LPSTR cab2IP;
-static LPSTR cab3IP;
-static LPSTR cab4IP;
-
 static DWORD mileageValue = 0;
 static int NeonColour;
 
@@ -89,16 +82,12 @@ static unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen
 	bindAddr.sin_family = AF_INET;
 	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
 	bindAddr.sin_port = htons(50765);
-	if (addr == (sockaddr*)& bindAddr) {
-		// terminal proxy
-		// redirect this to localhost
-		
-		auto localhost = inet_addr(terminalIP);
+	if (addr == (sockaddr*)&bindAddr) {
 		sockaddr_in bindAddr2 = { 0 };
 		bindAddr2.sin_family = AF_INET;
-		bindAddr2.sin_addr.s_addr = localhost;
+		bindAddr2.sin_addr.s_addr = inet_addr(ipaddr);
 		bindAddr2.sin_port = htons(50765);
-		return pbind(s, (sockaddr*)& bindAddr2, namelen);
+		return pbind(s, (sockaddr*)&bindAddr2, namelen);
 	}
 	else {
 		return pbind(s, addr, namelen);
@@ -244,131 +233,6 @@ extern int* ffbOffset2;
 extern int* ffbOffset3;
 extern int* ffbOffset4;
 
-typedef INT (WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
-static WsaStringToAddressA_t gWsaStringToAddressA;
-
-
-//#define LOCAL_IP "192.168.100.10"
-//#define ROUTER_IP "192.168.100.1"
-#define LOCALHOST "127.0.0.1"
-
-
-
-
-static INT WSAAPI Hook_WsaStringToAddressA(
-	_In_ LPSTR AddressString,
-	_In_ INT AddressFamily,
-	_In_opt_ LPWSAPROTOCOL_INFOA lpProtocolInfo,
-	_Out_ LPSOCKADDR lpAddress,
-	_Inout_ LPINT lpAddressLength
-)
-{
-	
-	
-	if (strcmp(AddressString, "192.168.92.254") == 0)
-	{
-		return gWsaStringToAddressA(
-			routerIP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.253") == 0)
-	{
-		return gWsaStringToAddressA(
-			routerIP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.11") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab1IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.12") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab2IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.13") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab3IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.14") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab4IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.20") == 0)
-	{
-		return gWsaStringToAddressA(
-			terminalIP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	return gWsaStringToAddressA(
-		AddressString,
-		AddressFamily,
-		lpProtocolInfo,
-		lpAddress,
-		lpAddressLength
-	);
-}
-
-typedef INT (WSAAPI* getaddrinfo_t)(PCSTR, PCSTR, const ADDRINFOA*, PADDRINFOA*);
-static getaddrinfo_t ggetaddrinfo;
-
-static INT WSAAPI Hook_getaddrinfo(
-	_In_opt_ PCSTR pNodeName,
-	_In_opt_ PCSTR pServiceName,
-	_In_opt_ const ADDRINFOA* pHints,
-	_Out_ PADDRINFOA* ppResult
-)
-{
-	if (pNodeName && strcmp(pNodeName, "192.168.92.253") == 0)
-	{
-		return ggetaddrinfo(routerIP, pServiceName, pHints, ppResult);
-	}
-
-	return ggetaddrinfo(pNodeName, pServiceName, pHints, ppResult);
-}
-
 static __int64(__fastcall* g_origMileageFix)(__int64);
 
 static __int64 __fastcall MileageFix(__int64 a1)
@@ -431,84 +295,6 @@ static InitFunction Wmmt6Func([]()
 		ipaddr = networkip.c_str();
 	}
 
-	std::string TERMINAL_IP = config["General"]["TerminalIP"];
-	if (!TERMINAL_IP.empty())
-	{
-		char* theIp = (char*)malloc(sizeof(char)*255);
-		memset(theIp, 0, sizeof(char) * 255);
-		strcpy(theIp, TERMINAL_IP.c_str());
-		terminalIP = (LPSTR)theIp;
-	}
-	else
-	{
-		terminalIP = "127.0.0.1";
-	}
-
-	std::string ROUTER_IP = config["General"]["RouterIP"];
-	if (!ROUTER_IP.empty())
-	{
-		char* theIp = (char*)malloc(sizeof(char) * 255);
-		memset(theIp, 0, sizeof(char) * 255);
-		strcpy(theIp, ROUTER_IP.c_str());
-		routerIP = (LPSTR)theIp;
-	}
-	else
-	{
-		routerIP = "192.168.86.1";
-	}
-
-	std::string Cab_1_IP = config["General"]["Cab1IP"];
-	if (!Cab_1_IP.empty())
-	{
-		char* theIp = (char*)malloc(sizeof(char) * 255);
-		memset(theIp, 0, sizeof(char) * 255);
-		strcpy(theIp, Cab_1_IP.c_str());
-		cab1IP = (LPSTR)theIp;
-	}
-	else
-	{
-		cab1IP = "192.168.255.255";
-	}
-
-	std::string Cab_2_IP = config["General"]["Cab2IP"];
-	if (!Cab_2_IP.empty())
-	{
-		char* theIp = (char*)malloc(sizeof(char) * 255);
-		memset(theIp, 0, sizeof(char) * 255);
-		strcpy(theIp, Cab_2_IP.c_str());
-		cab2IP = (LPSTR)theIp;
-	}
-	else
-	{
-		cab2IP = "192.168.255.255";
-	}
-
-	std::string Cab_3_IP = config["General"]["Cab3IP"];
-	if (!Cab_3_IP.empty())
-	{
-		char* theIp = (char*)malloc(sizeof(char) * 255);
-		memset(theIp, 0, sizeof(char) * 255);
-		strcpy(theIp, Cab_3_IP.c_str());
-		cab3IP = (LPSTR)theIp;
-	}
-	else
-	{
-		cab3IP = "192.168.255.255";
-	}
-
-	std::string Cab_4_IP = config["General"]["Cab4IP"];
-	if (!Cab_4_IP.empty())
-	{
-		char* theIp = (char*)malloc(sizeof(char) * 255);
-		memset(theIp, 0, sizeof(char) * 255);
-		strcpy(theIp, Cab_4_IP.c_str());
-		cab4IP = (LPSTR)theIp;
-	}
-	else
-	{
-		cab4IP = "192.168.255.255";
-	}
-
 	hookPort = "COM3";
 	imageBase = (uintptr_t)GetModuleHandleA(0);
 	MH_Initialize();
@@ -526,11 +312,6 @@ static InitFunction Wmmt6Func([]()
 
 	MH_CreateHookApi(L"kernel32", "OutputDebugStringA", Hook_OutputDebugStringA, NULL);
 	// CreateFile* hooks are in the JVS FILE
-
-
-	// Network hooks
-	MH_CreateHookApi(L"Ws2_32", "WSAStringToAddressA", Hook_WsaStringToAddressA, reinterpret_cast<LPVOID*>(&gWsaStringToAddressA));
-	MH_CreateHookApi(L"Ws2_32", "getaddrinfo", Hook_getaddrinfo, reinterpret_cast<LPVOID*>(&ggetaddrinfo));
 
 	// Give me the HWND please maxitune
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
@@ -552,6 +333,10 @@ static InitFunction Wmmt6Func([]()
 		injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
 	}
 
+	// Best LAN setting by doomertheboomer
+	injector::WriteMemory<BYTE>(imageBase + 0xA36CAA, 0xEB, true); //content router patch
+	injector::MakeNOP(imageBase + 0x690876, 2, true);
+	
 	// wtf is this?
 	//injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
 

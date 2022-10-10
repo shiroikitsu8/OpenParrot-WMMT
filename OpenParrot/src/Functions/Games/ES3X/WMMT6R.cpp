@@ -19,13 +19,6 @@ static bool isEventMode2P;
 static bool isEventMode4P;
 static const char* ipaddr;
 
-static LPSTR terminalIP;
-static LPSTR routerIP;
-static LPSTR cab1IP;
-static LPSTR cab2IP;
-static LPSTR cab3IP;
-static LPSTR cab4IP;
-
 // Data for IC card, Force Feedback etc OFF.
 static unsigned char settingData[405] = {
 	0x1F, 0x8B, 0x08, 0x08, 0x53, 0x6A, 0x8B, 0x5A, 0x00, 0x00, 0x73, 0x65,
@@ -274,13 +267,9 @@ static unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen
 	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
 	bindAddr.sin_port = htons(50765);
 	if (addr == (sockaddr*)&bindAddr) {
-		// terminal proxy
-		// redirect this to localhost
-
-		auto localhost = inet_addr(terminalIP);
 		sockaddr_in bindAddr2 = { 0 };
 		bindAddr2.sin_family = AF_INET;
-		bindAddr2.sin_addr.s_addr = localhost;
+		bindAddr2.sin_addr.s_addr = inet_addr(ipaddr);
 		bindAddr2.sin_port = htons(50765);
 		return pbind(s, (sockaddr*)&bindAddr2, namelen);
 	}
@@ -509,381 +498,204 @@ static BOOL Hook_ShowWindow(HWND hwnd, int nCmdShow)
 	return pShowWindow(hwnd, nCmdShow);
 }
 
-typedef INT(WSAAPI* WsaStringToAddressA_t)(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
-static WsaStringToAddressA_t gWsaStringToAddressA;
-
-static INT WSAAPI Hook_WsaStringToAddressA(
-	_In_ LPSTR AddressString,
-	_In_ INT AddressFamily,
-	_In_opt_ LPWSAPROTOCOL_INFOA lpProtocolInfo,
-	_Out_ LPSOCKADDR lpAddress,
-	_Inout_ LPINT lpAddressLength
-)
-{
-
-
-	if (strcmp(AddressString, "192.168.92.254") == 0)
-	{
-		return gWsaStringToAddressA(
-			routerIP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.253") == 0)
-	{
-		return gWsaStringToAddressA(
-			routerIP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.11") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab1IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.12") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab2IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.13") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab3IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.14") == 0)
-	{
-		return gWsaStringToAddressA(
-			cab4IP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	if (strcmp(AddressString, "192.168.92.20") == 0)
-	{
-		return gWsaStringToAddressA(
-			terminalIP,
-			AddressFamily,
-			lpProtocolInfo,
-			lpAddress,
-			lpAddressLength
-		);
-	}
-
-	return gWsaStringToAddressA(
-		AddressString,
-		AddressFamily,
-		lpProtocolInfo,
-		lpAddress,
-		lpAddressLength
-	);
-}
-
-typedef INT(WSAAPI* getaddrinfo_t)(PCSTR, PCSTR, const ADDRINFOA*, PADDRINFOA*);
-static getaddrinfo_t ggetaddrinfo;
-
-static INT WSAAPI Hook_getaddrinfo(
-	_In_opt_ PCSTR pNodeName,
-	_In_opt_ PCSTR pServiceName,
-	_In_opt_ const ADDRINFOA* pHints,
-	_Out_ PADDRINFOA* ppResult
-)
-{
-	if (pNodeName && strcmp(pNodeName, "192.168.92.253") == 0)
-	{
-		return ggetaddrinfo(routerIP, pServiceName, pHints, ppResult);
-	}
-
-	return ggetaddrinfo(pNodeName, pServiceName, pHints, ppResult);
-}
-
-
 static InitFunction Wmmt6RFunc([]()
+{
+		// Alloc debug console
+		FreeConsole();
+		AllocConsole();
+		SetConsoleTitle(L"Maxitune6R Console");
+
+		FILE* pNewStdout = nullptr;
+		FILE* pNewStderr = nullptr;
+		FILE* pNewStdin = nullptr;
+
+		::freopen_s(&pNewStdout, "CONOUT$", "w", stdout);
+		::freopen_s(&pNewStderr, "CONOUT$", "w", stderr);
+		::freopen_s(&pNewStdin, "CONIN$", "r", stdin);
+		std::cout.clear();
+		std::cerr.clear();
+		std::cin.clear();
+		std::wcout.clear();
+		std::wcerr.clear();
+		std::wcin.clear();
+
+		puts("hello there, maxitune");
+
+	// folder for path redirections
+	CreateDirectoryA(".\\TP", nullptr);
+
+	FILE* fileF = _wfopen(L".\\TP\\setting.lua.gz", L"r");
+	if (fileF == NULL)
 	{
-		// folder for path redirections
-		CreateDirectoryA(".\\TP", nullptr);
+		FILE* settingsF = _wfopen(L".\\TP\\setting.lua.gz", L"wb");
+		fwrite(settingData, 1, sizeof(settingData), settingsF);
+		fclose(settingsF);
+	}
+	else
+	{
+		fclose(fileF);
+	}
 
-		FILE* fileF = _wfopen(L".\\TP\\setting.lua.gz", L"r");
-		if (fileF == NULL)
-		{
-			FILE* settingsF = _wfopen(L".\\TP\\setting.lua.gz", L"wb");
-			fwrite(settingData, 1, sizeof(settingData), settingsF);
-			fclose(settingsF);
-		}
-		else
-		{
-			fclose(fileF);
-		}
+	bool isTerminal = false;
+	if (ToBool(config["General"]["TerminalMode"]))
+	{
+		isTerminal = true;
+	}
 
-		bool isTerminal = false;
-		if (ToBool(config["General"]["TerminalMode"]))
-		{
-			isTerminal = true;
-		}
+	std::string networkip = config["General"]["NetworkAdapterIP"];
+	if (!networkip.empty())
+	{
+		ipaddr = networkip.c_str();
+	}
 
-		std::string networkip = config["General"]["NetworkAdapterIP"];
-		if (!networkip.empty())
-		{
-			ipaddr = networkip.c_str();
-		}
+	hookPort = "COM3";
+	imageBase = (uintptr_t)GetModuleHandleA(0);
+	MH_Initialize();
 
-		std::string TERMINAL_IP = config["General"]["TerminalIP"];
-		if (!TERMINAL_IP.empty())
-		{
-			char* theIp = (char*)malloc(sizeof(char) * 255);
-			memset(theIp, 0, sizeof(char) * 255);
-			strcpy(theIp, TERMINAL_IP.c_str());
-			terminalIP = (LPSTR)theIp;
-		}
-		else
-		{
-			terminalIP = "127.0.0.1";
-		}
+	// Hook dongle funcs
+	MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_write", Hook_hasp_write, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_read", Hook_hasp_read, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_get_size", Hook_hasp_get_size, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_decrypt", Hook_hasp_decrypt, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_encrypt", Hook_hasp_encrypt, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_logout", Hook_hasp_logout, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_login", Hook_hasp_login, NULL);
+	MH_CreateHookApi(L"nbamUsbFinder.dll", "nbamUsbFinderGetSerialNumber", nbamUsbFinderGetSerialNumber, NULL);
+	MH_CreateHookApi(L"nbamUsbFinder.dll", "nbamUsbFinderInitialize", nbamUsbFinderInitialize, NULL);
+	MH_CreateHookApi(L"nbamUsbFinder.dll", "nbamUsbFinderRelease", nbamUsbFinderRelease, NULL);
 
-		std::string ROUTER_IP = config["General"]["RouterIP"];
-		if (!ROUTER_IP.empty())
-		{
-			char* theIp = (char*)malloc(sizeof(char) * 255);
-			memset(theIp, 0, sizeof(char) * 255);
-			strcpy(theIp, ROUTER_IP.c_str());
-			routerIP = (LPSTR)theIp;
-		}
-		else
-		{
-			routerIP = "192.168.86.1";
-		}
+	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
 
-		std::string Cab_1_IP = config["General"]["Cab1IP"];
-		if (!Cab_1_IP.empty())
-		{
-			char* theIp = (char*)malloc(sizeof(char) * 255);
-			memset(theIp, 0, sizeof(char) * 255);
-			strcpy(theIp, Cab_1_IP.c_str());
-			cab1IP = (LPSTR)theIp;
-		}
-		else
-		{
-			cab1IP = "192.168.255.255";
-		}
+	// Give me the HWND please maxitune
+	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
+	//MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
 
-		std::string Cab_2_IP = config["General"]["Cab2IP"];
-		if (!Cab_2_IP.empty())
-		{
-			char* theIp = (char*)malloc(sizeof(char) * 255);
-			memset(theIp, 0, sizeof(char) * 255);
-			strcpy(theIp, Cab_2_IP.c_str());
-			cab2IP = (LPSTR)theIp;
-		}
-		else
-		{
-			cab2IP = "192.168.255.255";
-		}
+	// Hook the window procedure
+	// (The image starts at 0x140000000)
+	//MH_CreateHook((void*)(imageBase + 0xB7C030), Hook_WndProc, (void**)&pMaxituneWndProc);
+	pMaxituneWndProc = (WindowProcedure_t)(imageBase + 0xC69BB0);
 
-		std::string Cab_3_IP = config["General"]["Cab3IP"];
-		if (!Cab_3_IP.empty())
-		{
-			char* theIp = (char*)malloc(sizeof(char) * 255);
-			memset(theIp, 0, sizeof(char) * 255);
-			strcpy(theIp, Cab_3_IP.c_str());
-			cab3IP = (LPSTR)theIp;
-		}
-		else
-		{
-			cab3IP = "192.168.255.255";
-		}
+	GenerateDongleData(isTerminal);
 
-		std::string Cab_4_IP = config["General"]["Cab4IP"];
-		if (!Cab_4_IP.empty())
-		{
-			char* theIp = (char*)malloc(sizeof(char) * 255);
-			memset(theIp, 0, sizeof(char) * 255);
-			strcpy(theIp, Cab_4_IP.c_str());
-			cab4IP = (LPSTR)theIp;
-		}
-		else
-		{
-			cab4IP = "192.168.255.255";
-		}
+	injector::WriteMemory<uint8_t>(imageBase + 0x716BC6, 0, true); 	// pls check
 
-		hookPort = "COM3";
-		imageBase = (uintptr_t)GetModuleHandleA(0);
-		MH_Initialize();
+	// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
+	if (ToBool(config["General"]["WhiteScreenFix"]))
+	{
+		injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
+	}
 
-		// Hook dongle funcs
-		MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_write", Hook_hasp_write, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_read", Hook_hasp_read, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_get_size", Hook_hasp_get_size, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_decrypt", Hook_hasp_decrypt, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_encrypt", Hook_hasp_encrypt, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_logout", Hook_hasp_logout, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_28756.dll", "hasp_login", Hook_hasp_login, NULL);
-		MH_CreateHookApi(L"nbamUsbFinder.dll", "nbamUsbFinderGetSerialNumber", nbamUsbFinderGetSerialNumber, NULL);
-		MH_CreateHookApi(L"nbamUsbFinder.dll", "nbamUsbFinderInitialize", nbamUsbFinderInitialize, NULL);
-		MH_CreateHookApi(L"nbamUsbFinder.dll", "nbamUsbFinderRelease", nbamUsbFinderRelease, NULL);
+	//injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
 
-		MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
+	// First auth error skip
+	injector::WriteMemory<BYTE>(imageBase + 0x71839B, 0xEB, true);
 
-
-		// Network hooks
-		MH_CreateHookApi(L"Ws2_32", "WSAStringToAddressA", Hook_WsaStringToAddressA, reinterpret_cast<LPVOID*>(&gWsaStringToAddressA));
-		MH_CreateHookApi(L"Ws2_32", "getaddrinfo", Hook_getaddrinfo, reinterpret_cast<LPVOID*>(&ggetaddrinfo));
-
-		// Give me the HWND please maxitune
-		MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
-		//MH_CreateHookApi(L"kernel32", "ReadFile", Hook_ReadFile, reinterpret_cast<LPVOID*>(&pReadFile));
-
-		// Hook the window procedure
-		// (The image starts at 0x140000000)
-		//MH_CreateHook((void*)(imageBase + 0xB7C030), Hook_WndProc, (void**)&pMaxituneWndProc);
-		pMaxituneWndProc = (WindowProcedure_t)(imageBase + 0xC69BB0);
-
-		GenerateDongleData(isTerminal);
-
-		injector::WriteMemory<uint8_t>(imageBase + 0x716BC6, 0, true); 	// pls check
-
-		// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
-		if (ToBool(config["General"]["WhiteScreenFix"]))
-		{
-			injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
-		}
-
-		//injector::MakeNOP(hook::get_pattern("45 33 C0 BA 65 09 00 00 48 8D 4D B0 E8 ? ? ? ? 48 8B 08", 12), 5);
-
-		// First auth error skip
-		injector::WriteMemory<BYTE>(imageBase + 0x71839B, 0xEB, true);
-
-		if (isTerminal)
-		{
+	if (isTerminal)
+	{
 		//safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
-			injector::MakeNOP((imageBase + 0x710445), 5);
-			safeJMP(hook::get_pattern("8B 01 0F B6 40 78 C3 CC CC CC CC"), ReturnTrue);
+		injector::MakeNOP((imageBase + 0x710445), 5);
+		safeJMP(hook::get_pattern("8B 01 0F B6 40 78 C3 CC CC CC CC"), ReturnTrue);
+	}
+	else
+	{
+		//injector::WriteMemory<WORD>(imageBase + 0x718FA1, 0x00D2, true); // terminal skip (whyyyyyyyyyyyyyyyy)
+		// spam thread
+		//injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2); //this should be the terminal on same machine patch
+		
+		// Best LAN setting by doomertheboomer
+		injector::WriteMemory<BYTE>(imageBase + 0xB0EB4A, 0xEB, true); //content router patch
+		injector::MakeNOP(imageBase + 0x7084A6, 2, true);
+		injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2);
+	}
 
+	// Enable all print
+	injector::WriteMemory<BYTE>(imageBase + 0x9891B3, 0xEB, true);
 
-		}
-		else
-		{
-			//injector::WriteMemory<WORD>(imageBase + 0x718FA1, 0x00D2, true); // terminal skip (whyyyyyyyyyyyyyyyy)
-			// spam thread
-			injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2); //this should be the terminal on same machine patch
-		}
+	// Dongle crap
+	injector::WriteMemory<BYTE>(imageBase + 0x71683A, 0xEB, true);
+	injector::WriteMemory<WORD>(imageBase + 0x716978, 0xE990, true);
 
-		// Enable all print
-		injector::WriteMemory<BYTE>(imageBase + 0x9891B3, 0xEB, true);
+	// Skip error modals
+	injector::MakeNOP(imageBase + 0x7089F4, 2);
 
-		// Dongle crap
-		injector::WriteMemory<BYTE>(imageBase + 0x71683A, 0xEB, true);
-		injector::WriteMemory<WORD>(imageBase + 0x716978, 0xE990, true);
+	// path fixes
+	injector::WriteMemoryRaw(imageBase + 0x1412758, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1412778, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1412798, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14127B8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14127D8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14127F8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1412818, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1412838, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1412858, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1412870, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7388, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C73A0, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C73B8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C73E0, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7408, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7420, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7438, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7448, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7458, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7470, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7488, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C74A8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C74C8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C74D8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C74E8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7500, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7518, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7530, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7548, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7560, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7578, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C7590, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C75A8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14C75C0, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14CFC48, "TP", 2, true); // F:/contents/
+	injector::WriteMemoryRaw(imageBase + 0x151F6D0, "TP/contents/", 12, true); // F:contents/
+	injector::WriteMemoryRaw(imageBase + 0x151F6E0, "TP/contents/", 12, true);	// G:contents/
+	injector::WriteMemoryRaw(imageBase + 0x1575C50, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1575C68, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x15769C8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x15769E0, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x15769F8, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1576A20, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1576A48, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x1576A60, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x15774C0, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x15774E0, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x157699C, "TP", 2, true); // F:/
+	injector::WriteMemoryRaw(imageBase + 0x14D2318, "TP", 2, true);
+	injector::WriteMemoryRaw(imageBase + 0x14D2B20, "TP", 2, true);
 
-		// Skip error modals
-		injector::MakeNOP(imageBase + 0x7089F4, 2);
+	if (ToBool(config["General"]["SkipMovies"]))
+	{
+		// Skip movies fuck you wmmt5
+		//safeJMP(imageBase + 0xA7D400, ReturnTrue);
+	}
 
-		// path fixes
-		injector::WriteMemoryRaw(imageBase + 0x1412758, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1412778, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1412798, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14127B8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14127D8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14127F8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1412818, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1412838, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1412858, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1412870, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7388, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C73A0, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C73B8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C73E0, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7408, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7420, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7438, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7448, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7458, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7470, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7488, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C74A8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C74C8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C74D8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C74E8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7500, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7518, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7530, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7548, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7560, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7578, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C7590, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C75A8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14C75C0, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14CFC48, "TP", 2, true); // F:/contents/
-		injector::WriteMemoryRaw(imageBase + 0x151F6D0, "TP/contents/", 12, true); // F:contents/
-		injector::WriteMemoryRaw(imageBase + 0x151F6E0, "TP/contents/", 12, true);	// G:contents/
-		injector::WriteMemoryRaw(imageBase + 0x1575C50, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1575C68, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x15769C8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x15769E0, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x15769F8, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1576A20, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1576A48, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x1576A60, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x15774C0, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x15774E0, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x157699C, "TP", 2, true); // F:/
-		injector::WriteMemoryRaw(imageBase + 0x14D2318, "TP", 2, true);
-		injector::WriteMemoryRaw(imageBase + 0x14D2B20, "TP", 2, true);
+	std::string value = config["General"]["CustomName"];
+	if (!value.empty())
+	{
 
-		if (ToBool(config["General"]["SkipMovies"]))
-		{
-			// Skip movies fuck you wmmt5
-			//safeJMP(imageBase + 0xA7D400, ReturnTrue);
-		}
+	}
 
-		std::string value = config["General"]["CustomName"];
-		if (!value.empty())
-		{
+	// Fix dongle error (can be triggered by various USB hubs, dongles
+	injector::MakeNOP(imageBase + 0x993FFF, 2, true);
 
-		}
+	// Save story stuff (only 05)
+	{
+		// skip erasing of temp card data
+		//injector::WriteMemory<uint8_t>(imageBase + 0xB2CF33, 0xEB, true);
+		// Skip erasing of temp card
+		//safeJMP(imageBase + 0x6ADBF0, LoadGameData); //Disabled temporary to stop users copying WMMT6 save to 6R until save works correctly so load has a purpose!!
+		//safeJMP(imageBase + 0x6C7270, ReturnTrue);
+	}
 
-		// Fix dongle error (can be triggered by various USB hubs, dongles
-		injector::MakeNOP(imageBase + 0x993FFF, 2, true);
+	MH_EnableHook(MH_ALL_HOOKS);
 
-		// Save story stuff (only 05)
-		{
-			// skip erasing of temp card data
-			//injector::WriteMemory<uint8_t>(imageBase + 0xB2CF33, 0xEB, true);
-			// Skip erasing of temp card
-			//safeJMP(imageBase + 0x6ADBF0, LoadGameData); //Disabled temporary to stop users copying WMMT6 save to 6R until save works correctly so load has a purpose!!
-			//safeJMP(imageBase + 0x6C7270, ReturnTrue);
-		}
-
-		MH_EnableHook(MH_ALL_HOOKS);
-
-	}, GameID::WMMT6R);
+}, GameID::WMMT6R);
 #endif
 #pragma optimize("", on)

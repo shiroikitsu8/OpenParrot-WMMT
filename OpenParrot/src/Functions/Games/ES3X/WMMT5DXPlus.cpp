@@ -23,9 +23,6 @@ bool isUpdate5 = false;
 
 // MUST DISABLE IC CARD, FFB MANUALLY N MT5DX+
 
-
-
-
 #define HASP_STATUS_OK 0
 unsigned int dxpHook_hasp_login(int feature_id, void* vendor_code, int hasp_handle) {
 #ifdef _DEBUG
@@ -323,23 +320,16 @@ unsigned int WINAPI Hook_bind_w5p(SOCKET s, const sockaddr* addr, int namelen) {
 	}
 }
 
-
-
 // Wmmt5Func([]()): InitFunction
 // Performs the initial startup tasks for 
 // maximum tune 5, including the starting 
 // of required subprocesses.
 static InitFunction Wmmt5Func([]()
 {
-	if (ToBool(config["Update5"]["Enable Update5"]))
-	{
-		isUpdate5 = true;
-	}
-
 	// Alloc debug console
 	FreeConsole();
 	AllocConsole();
-	SetConsoleTitle(L"Maxitune6 Console");
+	SetConsoleTitle(L"Maxitune5DX+ Console");
 
 	FILE* pNewStdout = nullptr;
 	FILE* pNewStderr = nullptr;
@@ -356,6 +346,11 @@ static InitFunction Wmmt5Func([]()
 	std::wcin.clear();
 
 	puts("hello there, maxitune");
+
+	if (ToBool(config["Update5"]["Enable Update5"]))
+	{
+		isUpdate5 = true;
+	}
 
 	// Records if terminal mode is enabled
 	bool isTerminal = false;
@@ -396,13 +391,16 @@ static InitFunction Wmmt5Func([]()
 
 	// Give me the HWND please maxitune
 	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
+	//pMaxituneWndProc = (WindowProcedure_t)(imageBasedxplus + 0xB78B90);
 	pMaxituneWndProc = (WindowProcedure_t)(hook::get_pattern("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 30 8B EA BA EB FF FF FF 49 8B F9 49 8B F0 48 8B D9 FF 15 ? ? ? 00 48 85 C0 74 1D 4C", 0));
 
 	//load banapass emu
-	if (!isUpdate5) {
+	if (!isUpdate5) 
+	{
 		LoadLibraryA(".\\openBanaW5p.dll");
 	}
-	else {
+	else 
+	{
 		LoadLibraryA(".\\openBanaW5p5.dll");
 	}
 
@@ -410,8 +408,6 @@ static InitFunction Wmmt5Func([]()
 	MH_CreateHookApi(L"KERNEL32", "SetSystemTime", Hook_SetSystemTime, reinterpret_cast<LPVOID*>(&pSetSystemTime));
 
 	GenerateDongleDataDxp(isTerminal);
-
-
 
 	injector::WriteMemory<uint8_t>(hook::get_pattern("85 C9 0F 94 C0 84 C0 0F 94 C0 84 C0 75 ? 40 32 F6 EB ?", 0x15), 0, true); //patches out dongle error2 (doomer)
 	injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 76 ? 49 8D ? ? ? ? 00 00"), 6);
@@ -438,11 +434,6 @@ static InitFunction Wmmt5Func([]()
 	{
 		injector::MakeNOP(hook::get_pattern("74 ? 80 7B 31 00 75 ? 48 8B 43 10 80 78 31 00 75 1A 48 8B D8 48 8B 00 80 78 31 00 75 ? 48 8B D8"), 2); //terminal on same machine patch
 
-		// If terminal emulator is enabled
-		if (ToBool(config["General"]["TerminalEmulator"]))
-		{
-			CreateThread(0, 0, SpamMulticast, 0, 0, 0);
-		}
 	}
 	else
 	{	//terminal mode patches
@@ -474,16 +465,19 @@ static InitFunction Wmmt5Func([]()
 		}
 	}
 
-	if (!isUpdate5) {
+	if (!isUpdate5) 
+	{
 		// Enable all print
 		injector::MakeNOP(imageBasedxplus + 0x898BD3, 6);
 
 		//Fix crash when saving story mode and Time attack
 		injector::MakeNOP(imageBasedxplus + 0xE90C7, 5);
 	}
-	else {
+	else
+	{
 		// Enable all print
 		injector::MakeNOP(imageBasedxplus + 0x8F15A3, 6);
+
 		//Fix crash when saving story mode and Time attack
 		injector::MakeNOP(imageBasedxplus + 0xE8DE7, 5);
 	}

@@ -894,7 +894,8 @@ static InitFunction Wmmt5DXFunc([]()
 	MH_CreateHookApi(L"hasp_windows_x64_98199.dll", "hasp_login", Hook_hasp_login, NULL);
 	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
 
-
+	//load banapass emu
+	LoadLibraryA(".\\openBanaW5p.dll");
 
 	GenerateDongleData(isTerminal);
 

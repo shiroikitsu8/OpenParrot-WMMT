@@ -173,31 +173,6 @@ static int writeLog(std::string filename, std::string message)
 	}
 }
 
-// writeDump(filename: Char*, data: unsigned char *, size: size_t): Int
-static int writeDump(char* filename, unsigned char* data, size_t size)
-{
-	// Open the file with the provided filename
-	FILE* file = fopen(filename, "wb");
-
-	// File opened successfully
-	if (file)
-	{
-		// Write the data to the file
-		fwrite((void*)data, 1, size, file);
-
-		// Close the file
-		fclose(file);
-
-		// Return success status
-		return 0;
-	}
-	else // Failed to open
-	{
-		// Return failure status
-		return 1;
-	}
-}
-
 static int ReturnTrue()
 {
 	return 1;
@@ -314,9 +289,11 @@ static InitFunction Wmmt5Func([]()
 		//load banapass emu
 		LoadLibraryA(".\\openBanaW5p.dll");
 
+		// disable assert errors
+		uintptr_t wassertPtr = (*(uintptr_t*)(imageBase + 0xc840c0));
+		safeJMP(wassertPtr, ReturnTrue);
 		
 		injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
-
 		injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 0F 87 B4 00 00 00", 6), 6);
 
 		// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!

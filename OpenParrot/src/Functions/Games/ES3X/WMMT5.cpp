@@ -1,17 +1,14 @@
 #include <StdInc.h>
 #include "Utility/InitFunction.h"
 #include "Functions/Global.h"
-#include <filesystem>
-#include <iostream>
-#include <cstdint>
-#include <fstream>
 #include "MinHook.h"
 #include <Utility/Hooking.Patterns.h>
-#include <chrono>
 #include <thread>
-
+#include <iostream>
+#include <Windowsx.h>
+#include <Utility/TouchSerial/MT6.h>
+#include <fstream>
 #ifdef _M_AMD64
-
 #pragma optimize("", off)
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -111,27 +108,6 @@ unsigned int Hook_hasp_write(int hasp_handle, int hasp_fileid, unsigned int offs
 	return HASP_STATUS_OK;
 }
 
-typedef int (WINAPI* BIND)(SOCKET, CONST SOCKADDR*, INT);
-BIND pbind = NULL;
-
-unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen) {
-	sockaddr_in bindAddr = { 0 };
-	bindAddr.sin_family = AF_INET;
-	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
-	bindAddr.sin_port = htons(50765);
-	if (addr == (sockaddr*)&bindAddr) {
-		sockaddr_in bindAddr2 = { 0 };
-		bindAddr2.sin_family = AF_INET;
-		bindAddr2.sin_addr.s_addr = inet_addr(ipaddr);
-		bindAddr2.sin_port = htons(50765);
-		return pbind(s, (sockaddr*)&bindAddr2, namelen);
-	}
-	else {
-		return pbind(s, addr, namelen);
-
-	}
-}
-
 // ******************************************** //
 // ************ Debug Data Logging ************ //
 // ******************************************** //
@@ -169,31 +145,6 @@ static int writeLog(std::string filename, std::string message)
 	else // File open failed
 	{
 		// Failure
-		return 1;
-	}
-}
-
-// writeDump(filename: Char*, data: unsigned char *, size: size_t): Int
-static int writeDump(char* filename, unsigned char* data, size_t size)
-{
-	// Open the file with the provided filename
-	FILE* file = fopen(filename, "wb");
-
-	// File opened successfully
-	if (file)
-	{
-		// Write the data to the file
-		fwrite((void*)data, 1, size, file);
-
-		// Close the file
-		fclose(file);
-
-		// Return success status
-		return 0;
-	}
-	else // Failed to open
-	{
-		// Return failure status
 		return 1;
 	}
 }
@@ -236,6 +187,103 @@ void GenerateDongleData(bool isTerminal)
 	}
 }
 
+static HWND mt6Hwnd;
+
+typedef BOOL(WINAPI* ShowWindow_t)(HWND, int);
+static ShowWindow_t pShowWindow;
+
+
+// Hello Win32 my old friend...
+typedef LRESULT(WINAPI* WindowProcedure_t)(HWND, UINT, WPARAM, LPARAM);
+static WindowProcedure_t pMaxituneWndProc;
+
+static BOOL gotWindowSize = FALSE;
+static unsigned displaySizeX = 0;
+static unsigned displaySizeY = 0;
+static float scaleFactorX = 0.0f;
+static float scaleFactorY = 0.0f;
+
+static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	if (!gotWindowSize)
+	{
+		displaySizeX = GetSystemMetrics(SM_CXSCREEN);
+		displaySizeY = GetSystemMetrics(SM_CYSCREEN);
+		scaleFactorX = static_cast<float>(displaySizeX) / 1360.0f;
+		scaleFactorY = static_cast<float>(displaySizeY) / 768.0f;
+		printf("display is %dx%d (scale factor of %f, %f)\n", displaySizeX, displaySizeY, scaleFactorX, scaleFactorY);
+		gotWindowSize = TRUE;
+	}
+
+	if (msg == WM_LBUTTONDOWN ||
+		msg == WM_LBUTTONUP)
+	{
+		unsigned short mx = GET_X_LPARAM(lParam);
+		unsigned short my = GET_Y_LPARAM(lParam);
+
+		//unsigned short trueMy = 768 - my;
+
+		float scaledMx = static_cast<float>(mx) / 1360.f;
+		float scaledMy = static_cast<float>(my) / 768.f;
+
+		scaledMy = 1.0f - scaledMy;
+
+		scaledMx *= scaleFactorX;
+		scaledMy *= scaleFactorY;
+
+		unsigned short trueMx = static_cast<int>(scaledMx * 16383.0f);
+		unsigned short trueMy = static_cast<int>(scaledMy * 16383.0f);
+		trueMy += 9500; // Cheap hack, todo do the math better!!
+
+		//mx *= (16383 / 1360);
+		//trueMy *= (16383 / 1360);
+
+		printf("%d %d\n", trueMx, trueMy);
+		mt6SetTouchParams(trueMx, trueMy, msg == WM_LBUTTONDOWN);
+
+		printf("MOUSE %s (%d, %d)\n", msg == WM_LBUTTONDOWN ? "DOWN" : "UP  ", mx, my);
+		return 0;
+	}
+
+	return pMaxituneWndProc(hwnd, msg, wParam, lParam);
+}
+
+static BOOL Hook_ShowWindow(HWND hwnd, int nCmdShow)
+{
+	SetWindowLongPtrW(hwnd, -4, (LONG_PTR)Hook_WndProc);
+	ShowCursor(1);
+
+	mt6Hwnd = hwnd;
+	return pShowWindow(hwnd, nCmdShow);
+}
+
+typedef void (WINAPI* OutputDebugStringA_t)(LPCSTR);
+static void Hook_OutputDebugStringA(LPCSTR str)
+{
+	printf("debug> %s", str);
+}
+
+typedef int (WINAPI* BIND)(SOCKET, CONST SOCKADDR*, INT);
+BIND pbind = NULL;
+
+unsigned int WINAPI Hook_bind(SOCKET s, const sockaddr* addr, int namelen) {
+	sockaddr_in bindAddr = { 0 };
+	bindAddr.sin_family = AF_INET;
+	bindAddr.sin_addr.s_addr = inet_addr("192.168.96.20");
+	bindAddr.sin_port = htons(50765);
+	if (addr == (sockaddr*)&bindAddr) {
+		sockaddr_in bindAddr2 = { 0 };
+		bindAddr2.sin_family = AF_INET;
+		bindAddr2.sin_addr.s_addr = inet_addr(ipaddr);
+		bindAddr2.sin_port = htons(50765);
+		return pbind(s, (sockaddr*)&bindAddr2, namelen);
+	}
+	else {
+		return pbind(s, addr, namelen);
+
+	}
+}
+
 extern int* ffbOffset;
 extern int* ffbOffset2;
 extern int* ffbOffset3;
@@ -255,145 +303,171 @@ DWORD WINAPI Wmmt5FfbCollector(void* ctx)
 }
 
 static InitFunction Wmmt5Func([]()
+{
+	// Alloc debug console
+	FreeConsole();
+	AllocConsole();
+	SetConsoleTitle(L"Maxitune5 Console");
+
+	FILE* pNewStdout = nullptr;
+	FILE* pNewStderr = nullptr;
+	FILE* pNewStdin = nullptr;
+
+	::freopen_s(&pNewStdout, "CONOUT$", "w", stdout);
+	::freopen_s(&pNewStderr, "CONOUT$", "w", stderr);
+	::freopen_s(&pNewStdin, "CONIN$", "r", stdin);
+	std::cout.clear();
+	std::cerr.clear();
+	std::cin.clear();
+	std::wcout.clear();
+	std::wcerr.clear();
+	std::wcin.clear();
+
+	FILE* fileF = _wfopen(L"Fsetting.lua.gz", L"r");
+	if (fileF == NULL)
 	{
-		FILE* fileF = _wfopen(L"Fsetting.lua.gz", L"r");
-		if (fileF == NULL)
-		{
-			FILE* settingsF = _wfopen(L"Fsetting.lua.gz", L"wb");
-			fwrite(settingData, 1, sizeof(settingData), settingsF);
-			fclose(settingsF);
-		}
-		else
-		{
-			fclose(fileF);
-		}
+		FILE* settingsF = _wfopen(L"Fsetting.lua.gz", L"wb");
+		fwrite(settingData, 1, sizeof(settingData), settingsF);
+		fclose(settingsF);
+	}
+	else
+	{
+		fclose(fileF);
+	}
 
-		FILE* fileG = _wfopen(L"Gsetting.lua.gz", L"r");
-		if (fileG == NULL)
-		{
-			FILE* settingsG = _wfopen(L"Gsetting.lua.gz", L"wb");
-			fwrite(settingData, 1, sizeof(settingData), settingsG);
-			fclose(settingsG);
-		}
-		else
-		{
-			fclose(fileG);
-		}
+	FILE* fileG = _wfopen(L"Gsetting.lua.gz", L"r");
+	if (fileG == NULL)
+	{
+		FILE* settingsG = _wfopen(L"Gsetting.lua.gz", L"wb");
+		fwrite(settingData, 1, sizeof(settingData), settingsG);
+		fclose(settingsG);
+	}
+	else
+	{
+		fclose(fileG);
+	}
 
 
-		bool isTerminal = false;
-		if (ToBool(config["General"]["TerminalMode"]))
-		{
-			isTerminal = true;
-		}
+	bool isTerminal = false;
+	if (ToBool(config["General"]["TerminalMode"]))
+	{
+		isTerminal = true;
+	}
 
-		std::string networkip = config["General"]["NetworkAdapterIP"];
-		if (!networkip.empty())
-		{
-			//strcpy(ipaddr, networkip.c_str());
-			ipaddr = networkip.c_str();
-		}
+	std::string networkip = config["General"]["NetworkAdapterIP"];
+	if (!networkip.empty())
+	{
+		//strcpy(ipaddr, networkip.c_str());
+		ipaddr = networkip.c_str();
+	}
 
-		hookPort = "COM3";
-		imageBase = (uintptr_t)GetModuleHandleA(0);
+	hookPort = "COM3";
+	imageBase = (uintptr_t)GetModuleHandleA(0);
 
-		MH_Initialize();
+	MH_Initialize();
 
-		// Hook dongle funcs
-		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_write", Hook_hasp_write, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_read", Hook_hasp_read, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_get_size", Hook_hasp_get_size, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_decrypt", Hook_hasp_decrypt, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_encrypt", Hook_hasp_encrypt, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_logout", Hook_hasp_logout, NULL);
-		MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_login", Hook_hasp_login, NULL);
-		MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
+	// Hook dongle funcs
+	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_write", Hook_hasp_write, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_read", Hook_hasp_read, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_get_size", Hook_hasp_get_size, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_decrypt", Hook_hasp_decrypt, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_encrypt", Hook_hasp_encrypt, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_logout", Hook_hasp_logout, NULL);
+	MH_CreateHookApi(L"hasp_windows_x64_109906.dll", "hasp_login", Hook_hasp_login, NULL);
+	MH_CreateHookApi(L"WS2_32", "bind", Hook_bind, reinterpret_cast<LPVOID*>(&pbind));
 
-		GenerateDongleData(isTerminal);
+	// Give me the HWND please maxitune
+	MH_CreateHookApi(L"user32", "ShowWindow", Hook_ShowWindow, reinterpret_cast<LPVOID*>(&pShowWindow));
+	//pMaxituneWndProc = (WindowProcedure_t)(imageBasedxplus + 0xB78B90);
+	pMaxituneWndProc = (WindowProcedure_t)(hook::get_pattern("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 30 8B EA BA EB FF FF FF 49 8B F9 49 8B F0 48 8B D9 FF 15 ? ? ? 00 48 85 C0 74 1D 4C", 0));
 
-		//load banapass emu
-		LoadLibraryA(".\\openBanaW5p.dll");
+	//load banapass emu
+	LoadLibraryA(".\\openBanaW5p.dll");
 
+	// disable assert errors
+	uintptr_t wassertPtr = (*(uintptr_t*)(imageBase + 0xc840c0));
+	safeJMP(wassertPtr, ReturnTrue);
+
+	GenerateDongleData(isTerminal);
 		
-		injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
+	injector::WriteMemory<uint8_t>(hook::get_pattern("0F 94 C0 84 C0 0F 94 C0 84 C0 75 05 45 32 ? EB", 0x13), 0, true);
+	injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 0F 87 B4 00 00 00", 6), 6);
 
-		injector::MakeNOP(hook::get_pattern("83 C0 FD 83 F8 01 0F 87 B4 00 00 00", 6), 6);
+	// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
+	if (ToBool(config["General"]["WhiteScreenFix"]))
+	{
+		injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
+	}
 
-		// Skip weird camera init that stucks entire pc on certain brands. TESTED ONLY ON 05!!!!
-		if (ToBool(config["General"]["WhiteScreenFix"]))
-		{
-			injector::WriteMemory<DWORD>(hook::get_pattern("48 8B C4 55 57 41 54 41 55 41 56 48 8D 68 A1 48 81 EC 90 00 00 00 48 C7 45 D7 FE FF FF FF 48 89 58 08 48 89 70 18 45 33 F6 4C 89 75 DF 33 C0 48 89 45 E7", 0), 0x90C3C032, true);
-		}
-
-		{
-			auto location = hook::get_pattern<char>("41 3B C7 74 0E 48 8D 8F B8 00 00 00 BA F6 01 00 00 EB 6E 48 8D 8F A0 00 00 00");
+	{
+		auto location = hook::get_pattern<char>("41 3B C7 74 0E 48 8D 8F B8 00 00 00 BA F6 01 00 00 EB 6E 48 8D 8F A0 00 00 00");
 			
-			injector::WriteMemory<uint8_t>(location + 3, 0xEB, true);
+		injector::WriteMemory<uint8_t>(location + 3, 0xEB, true);
 
-			injector::MakeNOP(location + 0x22, 2);
+		injector::MakeNOP(location + 0x22, 2);
 
-			injector::MakeNOP(location + 0x33, 2);
-		}
+		injector::MakeNOP(location + 0x33, 2);
+	}
 
+	{
+		auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
+		injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
+	}
+
+	if (isTerminal)
+	{
+		safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+
+		safeJMP(hook::get_pattern("40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 28 48 8D ? ? ? ? 00 48 8D ? ? ? ? 00 41 B8 ? ? 00 00 FF 15 ? ? ? ? 4C 8B 1B 41 0F B6 43 78"), ReturnTrue);
+	}
+	else
+	{
 		{
-			auto location = hook::get_pattern<char>("48 83 EC 28 33 D2 B9 70 00 02 00 E8 ? ? ? ? 85 C0 79 06");
-			injector::WriteMemory<uint8_t>(location + 0x12, 0xEB, true);
+			auto location = hook::get_pattern<char>("48 8B 18 48 3B D8 0F 84 88 00 00 00 39 7B 1C 74 60 80 7B 31 00 75 4F 48 8B 43 10 80 78 31 00");
+			injector::MakeNOP(location + 6, 6); // 6
+			injector::MakeNOP(location + 0xF, 2); // 0xF
+			injector::MakeNOP(location + 0x15, 2); // 0x15
 		}
+	}
 
-		if (isTerminal)
-		{
-			safeJMP(hook::get_pattern("0F B6 41 05 2C 30 3C 09 77 04 0F BE C0 C3 83 C8 FF C3"), ReturnTrue);
+	auto chars = { 'F', 'G' };
 
-			safeJMP(hook::get_pattern("40 53 48 83 EC 20 48 83 39 00 48 8B D9 75 28 48 8D ? ? ? ? 00 48 8D ? ? ? ? 00 41 B8 ? ? 00 00 FF 15 ? ? ? ? 4C 8B 1B 41 0F B6 43 78"), ReturnTrue);
-		}
-		else
+	for (auto cha : chars)
+	{
+		auto patterns = hook::pattern(va("%02X 3A 2F", cha));
+
+		if (patterns.size() > 0)
 		{
+			for (int i = 0; i < patterns.size(); i++)
 			{
-				auto location = hook::get_pattern<char>("48 8B 18 48 3B D8 0F 84 88 00 00 00 39 7B 1C 74 60 80 7B 31 00 75 4F 48 8B 43 10 80 78 31 00");
-				injector::MakeNOP(location + 6, 6); // 6
-				injector::MakeNOP(location + 0xF, 2); // 0xF
-				injector::MakeNOP(location + 0x15, 2); // 0x15
+				char* text = patterns.get(i).get<char>(0);
+				std::string text_str(text);
+
+				std::string to_replace = va("%c:/", cha);
+				std::string replace_with = va("./%c", cha);
+
+				std::string replaced = text_str.replace(0, to_replace.length(), replace_with);
+
+				injector::WriteMemoryRaw(text, (char*)replaced.c_str(), replaced.length() + 1, true);
 			}
 		}
+	}
 
-		auto chars = { 'F', 'G' };
+	if (ToBool(config["General"]["SkipMovies"]))
+	{
+		// Skip movies fuck you wmmt5
+		safeJMP(imageBase + 0x806020, ReturnTrue);
+	}
 
-		for (auto cha : chars)
-		{
-			auto patterns = hook::pattern(va("%02X 3A 2F", cha));
+	// Save story stuff (only 05)
+	{
+		// Fix F and G drive crash on mileage screen
+		injector::MakeNOP(imageBase + 0xCE5DF, 5);
+		CreateThread(0, 0, Wmmt5FfbCollector, 0, 0, 0);
+	}
 
-			if (patterns.size() > 0)
-			{
-				for (int i = 0; i < patterns.size(); i++)
-				{
-					char* text = patterns.get(i).get<char>(0);
-					std::string text_str(text);
+	MH_EnableHook(MH_ALL_HOOKS);
 
-					std::string to_replace = va("%c:/", cha);
-					std::string replace_with = va("./%c", cha);
-
-					std::string replaced = text_str.replace(0, to_replace.length(), replace_with);
-
-					injector::WriteMemoryRaw(text, (char*)replaced.c_str(), replaced.length() + 1, true);
-				}
-			}
-		}
-
-		if (ToBool(config["General"]["SkipMovies"]))
-		{
-			// Skip movies fuck you wmmt5
-			safeJMP(imageBase + 0x806020, ReturnTrue);
-		}
-
-		// Save story stuff (only 05)
-		{
-			// Fix F and G drive crash on mileage screen
-			injector::MakeNOP(imageBase + 0xCE5DF, 5);
-			CreateThread(0, 0, Wmmt5FfbCollector, 0, 0, 0);
-		}
-
-		MH_EnableHook(MH_ALL_HOOKS);
-
-	}, GameID::WMMT5);
+}, GameID::WMMT5);
 #endif
 #pragma optimize("", on)

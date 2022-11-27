@@ -31,6 +31,8 @@ static unsigned displaySizeY = 0;
 static float scaleFactorX = 0.0f;
 static float scaleFactorY = 0.0f;
 
+static HWND gameWindow;
+
 typedef INT(WINAPI* GetSystemMetrics_t)(int);
 static GetSystemMetrics_t pGetSystemMetrics;
 
@@ -48,12 +50,22 @@ int WINAPI hook_GetSystemMetrics(int nIndex)
 	return pGetSystemMetrics(nIndex);
 }
 
-void mt6SetTouchData(LPARAM lParam, BOOL down)
+void mt6SetTouchData(LPARAM lParam, BOOL down, BOOL isTouchScreen)
 {
 	if (bHasBooted)
 	{
-		unsigned short mx = GET_X_LPARAM(lParam);
-		unsigned short my = GET_Y_LPARAM(lParam);
+		unsigned short mx;
+		unsigned short my;
+		if (isTouchScreen) {
+			POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+			ScreenToClient(gameWindow, &point);
+			mx = point.x;
+			my = point.y;
+		}
+		else {
+			mx = GET_X_LPARAM(lParam);
+			my = GET_Y_LPARAM(lParam);
+		}
 
 		// Touchscreen y coordinates are inverted
 		my = displaySizeY - my;
@@ -237,7 +249,7 @@ DWORD mt6SerialNamedPipeServer(LPVOID _)
 	if (connected)
 	{
 		puts("client connection established, spawning thread");
-		
+
 		DWORD tid = 0;
 		CreateThread(NULL, 0, mt6SerialTouchThread, pipe, 0, &tid);
 		printf("thread spawned, tid=%d\n", tid);
@@ -253,6 +265,8 @@ void mt6SetDisplayParams(HWND hwnd) {
 	displaySizeY = rect.bottom;
 	scaleFactorX = (float)16383 / displaySizeX;
 	scaleFactorY = (float)16383 / displaySizeY;
+	RegisterTouchWindow(hwnd, 0);
+	gameWindow = hwnd;
 	printf("display is %dx%d (scale factor of %f, %f)\n", displaySizeX, displaySizeY, scaleFactorX, scaleFactorY);
 }
 

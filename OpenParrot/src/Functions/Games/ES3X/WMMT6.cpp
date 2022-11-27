@@ -184,7 +184,14 @@ static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	if (msg == WM_LBUTTONDOWN ||
 		msg == WM_LBUTTONUP)
 	{
-		mt6SetTouchData(lParam, msg == WM_LBUTTONDOWN);
+		mt6SetTouchData(lParam, msg == WM_LBUTTONDOWN, false);
+		return 0;
+	}
+
+	if (msg == WM_POINTERDOWN ||
+		msg == WM_POINTERUP)
+	{
+		mt6SetTouchData(lParam, msg == WM_POINTERDOWN, true);
 		return 0;
 	}
 

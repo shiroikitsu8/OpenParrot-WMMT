@@ -1,4 +1,6 @@
 #include "MT6.h"
+#include "MinHook.h"
+#include <Windowsx.h>
 #include <vector>
 
 #define TS_PIPE_TIMEOUT 16
@@ -24,12 +26,39 @@ volatile unsigned short touchy = 0;
 volatile BOOL touchpressed = FALSE;
 volatile BOOL touchlift = FALSE;
 
-void mt6SetTouchParams(unsigned short x, unsigned short y, BOOL down)
+static unsigned displaySizeX = 0;
+static unsigned displaySizeY = 0;
+static float scaleFactorX = 0.0f;
+static float scaleFactorY = 0.0f;
+
+typedef INT(WINAPI* GetSystemMetrics_t)(int);
+static GetSystemMetrics_t pGetSystemMetrics;
+
+// Telling wangan that the system res is 1360x768, aka stock game res
+// This makes scaling the touch input across resolutions a breeze
+int WINAPI hook_GetSystemMetrics(int nIndex)
+{
+	if (nIndex == 0) {
+		return 1360;
+	}
+
+	if (nIndex == 1) {
+		return 768;
+	}
+	return pGetSystemMetrics(nIndex);
+}
+
+void mt6SetTouchData(LPARAM lParam, BOOL down)
 {
 	if (bHasBooted)
 	{
-		touchx = x;
-		touchy = y;
+		unsigned short mx = GET_X_LPARAM(lParam);
+		unsigned short my = GET_Y_LPARAM(lParam);
+
+		// Touchscreen y coordinates are inverted
+		my = displaySizeY - my;
+		touchx = static_cast<int>(mx * scaleFactorX);
+		touchy = static_cast<int>(my * scaleFactorY);
 		touchpressed = down;
 	}
 }
@@ -156,9 +185,9 @@ DWORD mt6SerialTouchThread(HANDLE port)
 			memset(touchResp, 0, 5);
 			touchResp[0] = (char)0b11000000;
 			touchResp[1] = (touchx & 0b01111111);
-			touchResp[2] = ((touchx >> 8) & 0b01111111);
+			touchResp[2] = ((touchx >> 7) & 0b01111111);
 			touchResp[3] = (touchy & 0b01111111);
-			touchResp[4] = ((touchy >> 8) & 0b01111111);
+			touchResp[4] = ((touchy >> 7) & 0b01111111);
 			mt6WritePort(port, touchResp, 5);
 		}
 		else
@@ -169,9 +198,9 @@ DWORD mt6SerialTouchThread(HANDLE port)
 				memset(touchResp, 0, 5);
 				touchResp[0] = (char)0b10000000;
 				touchResp[1] = (touchx & 0b01111111);
-				touchResp[2] = ((touchx >> 8) & 0b01111111);
+				touchResp[2] = ((touchx >> 7) & 0b01111111);
 				touchResp[3] = (touchy & 0b01111111);
-				touchResp[4] = ((touchy >> 8) & 0b01111111);
+				touchResp[4] = ((touchy >> 7) & 0b01111111);
 				mt6WritePort(port, touchResp, 5);
 				touchlift = false;
 			}
@@ -217,8 +246,23 @@ DWORD mt6SerialNamedPipeServer(LPVOID _)
 	return 0;
 }
 
+void mt6SetDisplayParams(HWND hwnd) {
+	RECT rect;
+	GetClientRect(hwnd, &rect);
+	displaySizeX = rect.right;
+	displaySizeY = rect.bottom;
+	scaleFactorX = (float)16383 / displaySizeX;
+	scaleFactorY = (float)16383 / displaySizeY;
+	printf("display is %dx%d (scale factor of %f, %f)\n", displaySizeX, displaySizeY, scaleFactorX, scaleFactorY);
+}
+
 void mt6SerialTouchInit()
 {
+	// System metrics hook to decouple game res from touchscreen res
+	MH_Initialize();
+	MH_CreateHookApi(L"user32", "GetSystemMetrics", hook_GetSystemMetrics, reinterpret_cast<LPVOID*>(&pGetSystemMetrics));
+	MH_EnableHook(MH_ALL_HOOKS);
+
 	// This is on another thread so we can wait a bit to make sure the pipe server is actually init'd
 	CreateThread(NULL, 0, mt6SerialNamedPipeServer, NULL, 0, NULL);
 	Sleep(20);

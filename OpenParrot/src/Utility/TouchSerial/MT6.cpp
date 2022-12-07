@@ -170,6 +170,7 @@ DWORD mt6SerialTouchThread(HANDLE port)
 			if (memcmp(fileBuf, CMD_RESET, 3) == 0)
 			{
 				puts("CMD_RESET");
+				mt6SetDisplayParams(gameWindow);
 				bHasBooted = FALSE;
 				packetRecognised = TRUE;
 				mt6WritePort(port, OK_RESPONSE, 3);

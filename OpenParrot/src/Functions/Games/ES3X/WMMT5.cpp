@@ -215,6 +215,8 @@ static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		gotWindowSize = TRUE;
 	}
 
+	// TODO: Port below to use updated MT6 code
+	/*
 	if (msg == WM_LBUTTONDOWN ||
 		msg == WM_LBUTTONUP)
 	{
@@ -244,6 +246,7 @@ static LRESULT Hook_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		printf("MOUSE %s (%d, %d)\n", msg == WM_LBUTTONDOWN ? "DOWN" : "UP  ", mx, my);
 		return 0;
 	}
+	*/
 
 	return pMaxituneWndProc(hwnd, msg, wParam, lParam);
 }

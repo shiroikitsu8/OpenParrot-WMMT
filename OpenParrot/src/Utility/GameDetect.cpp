@@ -472,6 +472,10 @@ void GameDetect::DetectCurrentGame()
 				{
 					SetGameId(GameID::WMMT6R, "WMMT6R");
 				}
+				else if (newCrcResult == 0x37842885)
+				{
+					SetGameId(GameID::WMMT6RR, "WMMT6RR");
+				}
 				else 
 				{
 					SetGameId(GameID::WMMT5, "WMMT5 Update 10-21");
